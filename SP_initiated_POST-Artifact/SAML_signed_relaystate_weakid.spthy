@@ -1,0 +1,1197 @@
+
+
+
+
+
+
+
+
+
+
+
+
+theory SAML_signed_relaystate_weakid
+
+begin
+
+builtins: signing
+
+functions: https_request/3 [private], https_response/2 [private]
+
+// Agent initialization
+// ====================
+
+// Each agent needs to be initialized in some role (Client, SP, IdP) to use the
+// rules of the protocol. We require that each name is used in only one role, but
+// each agent could be involved in multiple sessions. Note that agents corrupted by
+// adversary can participate in any role using adversary communication rules below.
+
+// Initialize the agent. Agent_Initialized fact is not persistent so it can be
+// assigned only one role later. Long term key ~ltk and client ID ~clientID are
+// used only by some types of agents, but for simplicity we generate them here even
+// if they are unused.
+
+rule Initialize_Agent:
+  [
+    Fr(~ltk)
+    , Fr(~clientID)
+  ]--[
+    Initialize_Agent($Agent)
+    , Agent_Key($Agent, ~ltk)
+    , Agent_ID($Agent, ~clientID)
+  ]->[
+    Agent_Initialized($Agent)
+    , !Is_Agent($Agent)
+    , !Pk($Agent, pk(~ltk))
+    , !Ltk($Agent, ~ltk)
+    , !ClientID($Agent, ~clientID)
+    , Out(pk(~ltk))
+    , Out(~clientID)
+  ]
+
+// Initialized agent can now either be compromized ...
+
+rule Compromise_Agent[color=#f5b7b1]:
+  [
+    Agent_Initialized($Agent)
+    , !Ltk($Agent, ~ltk)
+  ]--[
+    Compromise_Agent($Agent)
+  ]->[
+    !Agent_Compromised($Agent)
+    , Out(~ltk)
+  ]
+
+// ... or assigned one of three possible roles.
+
+rule Initialize_SP[color=#e0ffff]:
+  [
+    Agent_Initialized($SP)
+  ]--[
+    Initialize_SP($SP)
+  ]->[
+    !SP_Initialized($SP)
+  ]
+
+rule Initialize_IdP[color=#fafad2]:
+  [
+    Agent_Initialized($IdP)
+  ]--[
+    Initialize_IdP($IdP)
+  ]->[
+    !IdP_Initialized($IdP)
+  ]
+
+rule Initialize_Client[color=#add8e6]:
+  [
+    Agent_Initialized($C)
+  ]--[
+    Initialize_Client($C)
+  ]->[
+    !Client_Initialized($C)
+  ]
+
+// Client registration
+// ===================
+// Clients needs to be registered at the IdP during the protocol setup. IdP will
+// only authenticate registered clients. Additionally, adversary can register
+// corrupted clients and an honest client can register at a compromised IdP.
+
+rule Register_Client_at_IdP[color=#add8e6]:
+  [
+    !Client_Initialized($C)
+    , !IdP_Initialized($IdP)
+    , !ClientID($C, ~clientID)
+    , Fr(~clientSecret)
+  ]--[
+    Register_Client_at_IdP($C, $IdP, ~clientID, ~clientSecret)
+  ]->[
+    !Client_Registered_at_IdP($IdP, ~clientID, ~clientSecret)
+  ]
+
+rule Adversary_Register_Client_at_IdP[color=#f5b7b1]:
+  [
+    !Agent_Compromised($C)
+    , !IdP_Initialized($IdP)
+    , !ClientID($C, ~clientID)
+    , Fr(~clientSecret)
+  ]--[
+    Adversary_Register_Client_at_IdP($C, $IdP, ~clientID, ~clientSecret)
+  ]->[
+    !Client_Registered_at_IdP($IdP, ~clientID, ~clientSecret)
+    , Out(~clientSecret)
+  ]
+
+rule Register_Client_at_Compromised_IdP[color=#f5b7b1]:
+  [
+    !Client_Initialized($C)
+    , !Agent_Compromised($IdP)
+    , !ClientID($C, ~clientID)
+    , Fr(~clientSecret)
+  ]--[
+    Register_Client_at_Compromised_IdP($C, $IdP, ~clientID, ~clientSecret)
+  ]->[
+    !Client_Registered_at_IdP($IdP, ~clientID, ~clientSecret)
+    , Out(~clientSecret)
+  ]
+
+// Resource registration
+// =====================
+// Clients need to registered their resources at service providers during the
+// protocol setup. Resources are indexed by urls (which are public values). The
+// long-term resource itself is a fresh value ~res (that hopefully remains secret).
+// Service provider indexes resources by clientIDs and should only provide
+// resources to their owners after they authenticate.
+
+rule Register_Resource_at_SP[color=#fafad2]:
+  [
+    !Client_Initialized($C)
+    , !SP_Initialized($SP)
+    , !ClientID($C, ~clientID)
+    , Fr(~res)
+  ]--[
+    Register_Resource_at_SP($C, $SP, ~clientID, ~res, $url)
+  ]->[
+    !Client_Has_Resource($SP, ~clientID, $url, ~res)
+    , !Is_Resource($url, $SP)
+  ]
+
+rule Adversary_Register_Resource_at_SP[color=#fafad2]:
+  [
+    !Agent_Compromised($C)
+    , !SP_Initialized($SP)
+    , !ClientID($C, ~clientID)
+    , Fr(~res)
+  ]--[
+    Adversary_Register_Resource_at_SP($C, $SP, ~clientID, ~res, $url)
+  ]->[
+    !Client_Has_Resource($SP, ~clientID, $url, ~res)
+    , Out(~res)
+    , !Is_Resource($url, $SP)
+  ]
+
+rule Register_Resource_at_Compromised_SP[color=#fafad2]:
+  [
+    !Agent_Compromised($SP)
+  ]--[
+    Register_Resource_at_Compromised_SP($SP, $url)
+  ]->[
+    !Is_Resource($url, $SP)
+  ]
+
+// IdP - SP trust establishment
+// ============================
+// When IdP and SP establish trust then IdP accepts resolve requests from SP, and
+// SP trusts assertions from IdP. For simplicity, we allow any two agents to
+// establish trust but the resulting fact is consumed only by SPs and IdPs. Note
+// that, any of the agents can be compromised by the adversary.
+
+rule Register_SP_at_IdP[color=#fafad2]:
+  [
+    !Is_Agent($SP)
+    , !Is_Agent($IdP)
+  ]--[
+    Register_SP_at_IdP($SP, $IdP)
+  ]->[
+    !Is_Registered($SP, $IdP)
+  ] 
+
+// TLS channel establishment
+// =========================
+// The rules below model the one-way-authenticated short-term TLS connections.
+
+// Every agent can initiate the TLS connection as client with every other agent as
+// server. Fresh session identifier is created and subsequently used when
+// exchanging request and response. Name of the server agent ($Server) is used as
+// the identity (e.g., as the common name in the TLS certificate). Note that the
+// adversary can start a TLS session on behalf any agent.
+
+// Request and responses are wrapped in https_request and https_response terms
+// respectivelly and sent/received using the ordinary In/Out mechanism. The fresh
+// session id (if used correctly by the honest parties) ensures that the adversary
+// cannot replay requests from honest clients and responses from honest servers.
+//
+// To communicate:
+//  - client sends a request after starting a new session:
+//      [New_Client_TLS_Session($Client, $Server, ~tls_session_id)]
+//      -->
+//      [Out(https_request($Server, ~tls_session_id, request))]
+//  - server replises using the same session id
+//      [New_Server_TLS_Session($Server, ~tls_session_id)
+//       , In(https_request($Server, ~tls_session_id, request))]
+//      -->
+//      [Out(https_response(~tls_session_id, response))]
+//  - client saves the tls_session_id in the state and uses it to fetch the response
+
+rule Client_Starts_TLS:
+  [
+    Fr(~tls_session_id)
+    , !Is_Agent($Client)
+    , !Is_Agent($Server)
+  ]--[
+    Client_Starts_TLS($Client, $Server, ~tls_session_id)
+  ]->[
+    New_Client_TLS_Session($Client, $Server, ~tls_session_id)
+    , New_Server_TLS_Session($Server, ~tls_session_id)
+  ]
+
+// Adversary communication
+// =======================
+// Since protocol uses TLS, adversary communication rules need to be added
+// explicitly. We assume TLS is one-way authenticated. Hence, adversary can
+// initiate TLS session with anyone as client, and receive the response. If an
+// honest client initiates a TLS session with a corrupted agent, then adversary can
+// receive that message and send the response using the rules below. For efficincy,
+// we explicity disallow adversary-to-adversary TLS connections using a
+// No_Corrupt_to_Corrupt_TLS restriction. 
+
+rule Adversary_Sends_as_Client[color=#f5b7b1]:
+  [
+    In(message)
+    , New_Client_TLS_Session($Agent, $Server, ~tls_session_id)
+    , !Agent_Compromised($Agent)
+  ]--[
+  ]->[
+    Out(https_request($Server, ~tls_session_id, message))
+    , St_Adversary_Client_TLS_Session(~tls_session_id)
+  ]
+
+rule Adversary_Receives_as_Client[color=#f5b7b1]:
+  [
+    St_Adversary_Client_TLS_Session(~tls_session_id)
+    , In(https_response(~tls_session_id, message))
+  ]--[
+    Adversary_Receives_as_Client(https_response(~tls_session_id, message))
+  ]->[
+    Out(message)
+  ]
+
+rule Adversary_Receives_as_Server[color=#f5b7b1]:
+  [
+    In(https_request($Agent, ~tls_session_id, message))
+    , !Agent_Compromised($Agent)
+  ]--[
+     Adversary_Receives_as_Server(https_request($Agent, ~tls_session_id, message))
+  ]->[
+    Out(message)
+  ]
+
+rule Adversary_Sends_as_Server[color=#f5b7b1]:
+  [
+    In(message)
+    , !Agent_Compromised($Agent)
+    , New_Server_TLS_Session($Agent, ~tls_session_id)
+  ]--[
+    Adversary_Sends_as_Server($Agent, ~tls_session_id, message)
+  ]->[
+    Out(https_response(~tls_session_id, message))
+  ]
+
+// ID generation
+// =============
+// SAML standard requires that "Any party that assigns an identifier MUST ensure
+// that there is negligible probability that that party or any other party will
+// accidentally assign the same identifier to a different data object". Hence, it
+// is not a requirement that ID's are unpredictable to a malicious adversary. We
+// model the case of weak-ids by generating id's as fresh values and leaking them
+// to the adversary immediatelly.
+
+rule Generate_New_Id:
+  [
+    Fr(~id)
+  ]--[
+    Generate_New_Id(~id)
+  ]->[
+    New_Id(~id)
+
+  , Out(~id)
+
+  ]
+
+// RelayState
+// ==========
+// Service providers can use the Relay State mechanism to associate subsequent
+// interactions with the original request. We consider two variants corresponding
+// to Shibboleth service provider 'ss:mem' and default options for 'relayState'. 
+
+// In the 'relaystate' variant we use a fresh nonce ~rs to link the data in the
+// original request (namely $SP, $IdP, AuthnRequest, $url). The nonce ~rs is sent
+// along with the AuthnRequest and expected to be returned back from the client.
+
+// In the 'norelaystate', the service provider sends back the requested $url and
+// expects to receive some $url again when the client comes back with the artifact.
+// Hence, there is no explicit connection between the initial and later client
+// request stored in the state of the service provider.
+
+
+
+ // rs sent with AuthnRequest and expected back 
+ // (rs, url) stored in the state
+
+
+
+// AuthnRequest signatures
+// =======================
+// We consider two variants for authnrequest. In the 'signed' variant the
+// authnrequest are signed using the SP's public key (and those signatures are
+// verified by the IdP). In the 'unsigned' variant there are no signatures.
+
+
+
+
+
+
+
+// SAML WEB SSO Profile: SP-Initiated SSO: POST/Artifact Bindings
+// ==============================================================
+
+// Service provider
+// ================
+
+// Arbitrary request for a resource initiates the profile.
+// - Service provider nondeterministically picks an IdP it trusts.
+// - Service provider generates SAML AuthnRequest message.
+// - Service provider generates RelayState in order to associate the profile exchange 
+//   with the original request. 
+
+rule SP_Resource_Request[color=#e0ffff]:
+  let
+    // Received
+    ResourceRequest = <'ResourceRequest', $url>
+    Req = https_request($SP, ~tls_session_id_C_SP, ResourceRequest)
+    // Building
+    AuthnRequest = <'AuthnRequest', ~id_authnrequest, $SP, $IdP>
+    OptionalSignature = sign(AuthnRequest ,  ~ltkSP)
+    RelayState = ~rs  
+    // Sending
+    Resp = https_response(~tls_session_id_C_SP, <$IdP, RelayState, AuthnRequest, OptionalSignature>)
+  in
+  [
+    !SP_Initialized($SP)
+    , !Is_Resource($url, $SP)
+    , !Is_Registered($SP, $IdP)
+    , !Ltk($SP, ~ltkSP)
+    , New_Server_TLS_Session($SP, ~tls_session_id_C_SP)
+    , In(Req)
+    , New_Id(~id_authnrequest)
+    , Fr(~rs)
+  ]--[
+    Start_SP($SP)
+    , SP_Resource_Request($SP, $IdP, ~id_authnrequest, $url)
+    , Https_Response(Resp)
+  ]->[
+    SP_State_1($SP, $IdP, AuthnRequest, <~rs ,  $url>)
+    , Out(Resp)
+  ]
+
+// When the client authenticates it will request the resource again, but this time
+// the client will present the artifact as well. 
+
+rule SP_Resource_Request_With_Artifact[color=#e0ffff]:
+  let
+    // Stored
+    AuthnRequest = <'AuthnRequest', ~id_authnrequest, $SP, $IdP>
+    // Received
+    Artifact = <'Artifact', $IdP, ~messageHandle>
+    RelayState = ~rs  
+    Req = https_request($SP, ~client_ID_TLS_C_SP, <Artifact, RelayState>)
+    // Building
+    ArtifactResolve = <'ArtifactResolve', ~id_artifactresolve, $SP, Artifact>
+    ArtifactResolveSig = sign(ArtifactResolve, ~ltkSP)
+    // Sending
+    Out_Req = https_request($IdP, ~client_ID_TLS_SP_IdP, <ArtifactResolve, ArtifactResolveSig>)
+  in
+  [
+    SP_State_1($SP, $IdP, AuthnRequest, <~rs ,  $url>)
+    , !Ltk($SP, ~ltkSP)
+    , !Is_Resource($url, $SP)
+    , New_Id(~id_artifactresolve)
+    , New_Server_TLS_Session($SP, ~client_ID_TLS_C_SP)
+    ,	In(Req)
+    , New_Client_TLS_Session($SP, $IdP, ~client_ID_TLS_SP_IdP)
+  ]--[
+    SP_Resource_Request_With_Artifact($SP, $IdP, ~id_authnrequest, ~messageHandle)
+    , SP_Signs_ArtifactResolve($SP, ArtifactResolve)
+    , Https_Request(Out_Req)
+  ]->[
+    SP_State_2($SP, $IdP, AuthnRequest, $url, ArtifactResolve, ~client_ID_TLS_C_SP, ~client_ID_TLS_SP_IdP)
+    , Out(Out_Req)
+  ]
+
+rule SP_Artifact_Resolution[color=#e0ffff]:
+  let
+    // Stored
+    AuthnRequest = <'AuthnRequest', ~id_authnrequest, $SP, $IdP>
+    Artifact = <'Artifact', $IdP, ~messageHandle>
+    ArtifactResolve = <'ArtifactResolve', ~id_artifactresolve, $SP, Artifact>
+    // Recieved
+    Audience = <'Audience', $SP>
+    Subject = < 'Subject', ~clientID, ~id_authnrequest>
+    Assertion = <'Assertion', ~id_assertion, $IdP, Subject, Audience, ~assertion_secret>
+    Response = <'Response', ~id_response, $IdP, ~id_authnrequest, Assertion>
+    ArtifactResponse = <'ArtifactResponse', $IdP, ~id_artifactresolve, Response, ResponseSignature>
+    ArtifactResponseSig = sign(ArtifactResponse, ~ltkIdP)
+    ResponseSignature = sign(Response, ~ltkIdP)
+    In_Resp = https_response(~client_ID_TLS_SP_IdP, <ArtifactResponse, ArtifactResponseSig>)
+    // Building
+    Resource = <~res, $url, ~ts_res>
+    // Sending
+    Out_Resp = https_response(~client_ID_TLS_C_SP, Resource)
+  in
+  [
+    SP_State_2($SP, $IdP, AuthnRequest, $url, ArtifactResolve, ~client_ID_TLS_C_SP, ~client_ID_TLS_SP_IdP)
+    , !Ltk($IdP, ~ltkIdP)
+    , !Client_Has_Resource($SP, ~clientID, $url, ~res)
+    , Fr(~ts_res)
+    , In(In_Resp)
+  ]--[
+    SP_Params_Client($SP, $IdP, ~clientID, Resource, ~id_authnrequest)
+    , SP_Params_IdP($SP, $IdP, ~clientID, ~id_authnrequest, ~messageHandle, ~id_artifactresolve)
+    , SP_Assertion_Secret($SP, $IdP, ~assertion_secret)
+    , SPFinish($SP, $C, $IdP)
+    , Https_Response(Out_Resp)
+  ]->[
+    Out(Out_Resp)
+  ]
+
+// Identity provider
+// =================
+
+// Client authentication and consenting to log on to SP
+// ====================================================
+//
+// The method of authentication and consent is not specified by the SAML standard.
+// We abstract the client authentication by using the client secrets. 
+
+rule IdP_Receive_Authentication_Request[color=#fafad2]:
+  let
+    // Received
+    AuthnRequest = <'AuthnRequest', ~id_authnrequest, $SP, $IdP>
+    OptionalSignature = sign(AuthnRequest ,  ~ltkSP)
+    RelayState = ~rs  
+    Req = https_request($IdP, ~tls_session_id_C_IdP, <$IdP, RelayState, AuthnRequest, OptionalSignature>)
+    // Sending
+    Resp = https_response(~tls_session_id_C_IdP, <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+  in
+  [
+    !IdP_Initialized($IdP)
+    , !Is_Registered($SP, $IdP)
+    , !Ltk($SP, ~ltkSP)
+    , New_Server_TLS_Session($IdP, ~tls_session_id_C_IdP)
+    , Fr(~auth_session)
+    , In(Req)
+  ]--[
+    Start_IdP($IdP)
+    , Https_Response(Resp)
+  ]->[
+    IdP_State_1($IdP, RelayState, AuthnRequest, ~auth_session)
+    , Out(Resp)
+  ]
+
+rule IdP_Client_Authentication[color=#fafad2]:
+  let
+    // Received
+    AuthnRequest = <'AuthnRequest', ~id_authnrequest, $SP, $IdP>
+    Req = https_request($IdP, ~client_ID_TLS_C_IdP, <'IAuthAndConsent', ~clientID, $SP, $IdP, ~clientSecret, ~auth_session>)
+    // Building
+    Artifact = <'Artifact', $IdP, ~messageHandle>
+    // Tagging
+    RelayState = ~rs  
+    // Sending
+    Resp = https_response(~client_ID_TLS_C_IdP, <Artifact, RelayState>)
+  in
+  [
+    IdP_State_1($IdP, RelayState, AuthnRequest, ~auth_session)
+    , !Client_Registered_at_IdP($IdP, ~clientID, ~clientSecret)
+    , Fr(~messageHandle)
+    , New_Server_TLS_Session($IdP, ~client_ID_TLS_C_IdP)
+    , In(Req)
+  ]--[
+    IdP_Client_Authentication($IdP, ~clientID, AuthnRequest)
+    , Https_Response(Resp)
+  ]->[
+    IdP_State_2($IdP, AuthnRequest, Artifact, ~clientID)
+    , Out(Resp)
+  ]
+
+rule IdP_Artifact_Resolution[color=#fafad2]:
+  let
+    // Stored
+    Artifact = <'Artifact', $IdP, ~messageHandle>
+    AuthnRequest = <'AuthnRequest', ~id_authnrequest, $SP, $IdP>
+    // Recieved
+    ArtifactResolve = <'ArtifactResolve', ~id_artifactresolve, $SP, Artifact>
+    ArtifactResolveSig = sign(ArtifactResolve, ~ltkSP)
+    Req = https_request($IdP, ~client_ID_TLS_SP_IdP, <ArtifactResolve, ArtifactResolveSig>)
+    // Building
+    Audience = <'Audience', $SP>
+    Subject = < 'Subject', ~clientID, ~id_authnrequest>
+    Assertion = <'Assertion', ~id_assertion, $IdP, Subject, Audience, ~assertion_secret>
+    Response = <'Response', ~id_response, $IdP, ~id_authnrequest, Assertion>
+    ResponseSignature = sign(Response, ~ltkIdP)
+    ArtifactResponse = <'ArtifactResponse', $IdP, ~id_artifactresolve, Response, ResponseSignature>
+    ArtifactResponseSig = sign(ArtifactResponse, ~ltkIdP)
+    Resp = https_response(~client_ID_TLS_SP_IdP, <ArtifactResponse, ArtifactResponseSig>)
+  in
+  [
+    IdP_State_2($IdP, AuthnRequest, Artifact, ~clientID)
+    , !Ltk($SP, ~ltkSP)
+    , !Ltk($IdP, ~ltkIdP)
+    , !Client_Registered_at_IdP($IdP, ~clientID, ~clientSecret)
+    , New_Server_TLS_Session($IdP, ~client_ID_TLS_SP_IdP)
+    , In(Req)
+    , Fr(~assertion_secret)
+    , New_Id(~id_assertion)
+    , New_Id(~id_response)
+  ]--[
+    IDPFinish($C, $SP, $IdP)
+    , IdP_Params($IdP, $SP, ~clientID, ~id_authnrequest, ~messageHandle, ~id_artifactresolve)
+    , IdP_Assertion_Secret($IdP, $SP, ~assertion_secret)
+    , Https_Response(Resp)
+  ]->[
+    Out(Resp)
+  ]
+
+// Generic client
+// ==============
+// 
+// In this generic client, the url the client will request is chosen
+// nondeterministically. E.g. we model the scenario where client can request an
+// incorrect resource (e.g. by accident or a phishing attack). The url has to be
+// valid url for some resource at some service provider (not neccessarily the same
+// one the client contacts).
+
+// For performance reasons, sample client verifies that AuthnRequest and Artifact
+// are of the correct format (but the data inside does not have to correspond to
+// any information in the session).  
+
+rule Client_Resource_Request[color=#add8e6]:
+  let
+    ResourceRequest = <'ResourceRequest', $url>
+    // Sending
+    Req = https_request($SP, ~tls_session_id_C_SP, ResourceRequest)
+  in
+  [
+    !Client_Initialized($C)
+    , !Is_Resource($url, $SP1)
+    , Fr(~client_session_id)
+    , New_Client_TLS_Session($C, $SP, ~tls_session_id_C_SP)
+  ]--[
+    Start_Client($C)
+    , Client_Resource_Request($C, $SP, ~client_session_id, $url)
+    , Https_Request(Req)
+  ]->[
+    Client_State_1($C, $SP, ~client_session_id, ~tls_session_id_C_SP)
+    , Out(Req)
+  ]
+
+rule Client_AuthnRequest_Redirect[color=#add8e6]:
+  let
+    // Received and forwarding
+    AuthnRequest = <'AuthnRequest', ~id_authnrequest, $SP1, $IdP1>
+    OptionalSignature = sign(AuthnRequest ,  ~ltkSP1)
+    RelayState = ~rs  
+    Resp = https_response(~tls_session_id_C_SP, <$IdP, RelayState, AuthnRequest, OptionalSignature>)
+    // Sending
+    Req = https_request($IdP, ~tls_session_id_C_IdP, <$IdP, RelayState, AuthnRequest, OptionalSignature>)
+  in
+  [
+    Client_State_1($C, $SP, ~client_session_id, ~tls_session_id_C_SP)
+    , !Ltk($SP1, ~ltkSP1)
+    , In(Resp)
+    ,	New_Client_TLS_Session($C, $IdP, ~tls_session_id_C_IdP)
+  ]--[
+    Https_Request(Req)
+  ]->[
+    Client_State_2($C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_IdP)
+    , Out(Req)
+  ]
+
+rule Client_Authentication_at_IdP[color=#add8e6]:
+  let
+    // Received
+    Resp = https_response(~tls_session_id_C_IdP, <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+    // Sending
+    Req = https_request($IdP, ~tls_session_id_C_IdP_1, <'IAuthAndConsent', ~clientID, $SP, $IdP, ~clientSecret, ~auth_session>)
+  in
+  [
+    Client_State_2($C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_IdP)
+    , !ClientID($C, ~clientID)
+    , !Client_Registered_at_IdP($IdP, ~clientID, ~clientSecret)
+    , In(Resp)
+    , New_Client_TLS_Session($C, $IdP, ~tls_session_id_C_IdP_1)
+  ]--[
+    Https_Request(Req)
+  ]->[
+    Client_State_3($C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_IdP_1)
+    , Out(Req)
+  ]
+
+rule Client_Artifact_Redirect[color=#add8e6]:
+  let
+    // Received
+    Artifact = <'Artifact', $Agent, ~messageHandle>
+    RelayState = ~rs  
+    Resp = https_response(~tls_session_id_C_IdP, <Artifact, RelayState>)
+    // Sending
+    Req = https_request($SP, ~tls_session_id_C_SP, <Artifact, RelayState>)
+  in
+  [
+    Client_State_3($C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_IdP)
+    , In(Resp)
+    , New_Client_TLS_Session($C, $SP, ~tls_session_id_C_SP)
+  ]--[
+    Client_Artifact_Redirect($C, $SP, $IdP, ~client_session_id, $Agent)
+    , Https_Request(Req)
+  ]->[
+    Client_State_4($C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_SP)
+    , Out(Req)
+  ]
+
+rule Client_Receive_Resource[color=#add8e6]:
+  let
+    // Received
+    Resource = <~res, $url, ~ts_res>
+    Resp = https_response(~tls_session_id_C_SP, Resource)
+  in
+  [
+    Client_State_4($C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_SP)
+    , In(Resp)
+    , !ClientID($C, ~clientID)
+  ]--[
+    ClientFinish($C, $SP, $IdP)
+    , Client_Params($C, $SP, $IdP, ~clientID, ~client_session_id, Resource)
+  ]->
+  []
+
+// Model restrictions
+// ==================
+
+// Each agent can be initialized at most once.
+restriction Agent_Initializes_Once:
+  "All A #i #j.
+    (Initialize_Agent(A) @ i & Initialize_Agent(A) @ j)
+    ==> (#i = #j)
+  "
+
+// It makes no sense to allow adversary to talk to itself via TLS.
+restriction No_Corrupt_to_Corrupt_TLS:
+  "All C S id #i #j #k.
+    ((Client_Starts_TLS(C, S, id) @ i & Compromise_Agent(C) @ j & Compromise_Agent(S) @ k)
+    ==> F)
+  "
+  
+// Simplifying restrictions for development purposes
+// =================================================
+//
+// For more efficient and easier development, we will sometimes that there is at
+// most one honest agents of each kind and/or at most one session of each type.
+
+// WARNING: Make sure this is not defined when proving security properties.
+
+#ifdef ONE_AGENT_PER_TYPE
+
+restriction One_Client:
+  "All A B #i #j. (Initialize_Client(A) @ i & Initialize_Client(B) @ j ==> (A = B & #i = #j))"
+
+restriction One_SP:
+  "All A B #i #j. (Initialize_SP(A) @ i & Initialize_SP(B) @ j ==> (A = B & #i = #j))"
+
+restriction One_IdP:
+  "All A B #i #j. (Initialize_IdP(A) @ i & Initialize_IdP(B) @ j ==> (A = B & #i = #j))"
+
+#endif
+
+#ifdef ONE_SESSION_PER_AGENT
+
+restriction One_Client_Session:
+  "All A #i #j. (Start_Client(A) @ i & Start_Client(A) @ j ==> (#i = #j))"
+
+restriction One_SP_Session:
+  "All A #i #j. (Start_SP(A) @ i & Start_SP(A) @ j ==> (#i = #j))"
+
+restriction One_IdP_Session:
+  "All A #i #j. (Start_IdP(A) @ i & Start_IdP(A) @ j ==> (#i = #j))"
+
+#endif 
+
+// When proving properties between SP and IdP we can assume the client is corrupted
+// and disable client rules completely for better perfomance.
+
+#ifdef NO_CLIENTS
+
+restriction No_Client_Sessions:
+  "All A #i. Start_Client(A) @ i ==> F"
+
+#endif 
+
+// Type lemmas
+// ===========
+
+// This source lemma is necessary to resolve partial deconstructions during
+// precomputation.
+
+lemma https_typing[sources]:
+  all-traces
+  "(All m #i. 
+      Adversary_Receives_as_Client(m) @ i 
+      ==> ( Ex #j. Https_Response(m) @ j & #j < #i ) )
+    & 
+    (All m #i. 
+      Adversary_Receives_as_Server(m) @ i 
+      ==> ( Ex #j. Https_Request(m) @ j & #j < #i ) )
+  "
+
+// Helper lemmas
+// =============
+
+#ifdef INCLUDE_HELPERS
+
+// Each agent is either compromised or corrupt
+lemma helper_Either_Honest_or_Compromised_Client[reuse]:
+  "All A #i #j.
+    ((Compromise_Agent(A) @ i & Initialize_Client(A) @ j)
+    ==> F)
+  "
+
+// Each agent is either compromised or corrupt
+lemma helper_Either_Honest_or_Compromised_SP[reuse]:
+  "All A #i #j.
+    ((Compromise_Agent(A) @ i & Initialize_SP(A) @ j)
+    ==> F)
+  "
+
+// Each agent is either compromised or corrupt
+lemma helper_Either_Honest_or_Compromised_IdP[reuse]:
+  "All A #i #j.
+    ((Compromise_Agent(A) @ i & Initialize_IdP(A) @ j)
+    ==> F)
+  "
+
+// Adversary cannot sent as server unless corrupting agent.
+lemma helper_tls_Sends_as_Server_Only_if_Compromised[reuse]:
+  "All A id m #i.
+    (Adversary_Sends_as_Server(A, id, m) @ i ==> (Ex #j. Compromise_Agent(A) @ j))
+  "
+
+// Adversary cannot sent as server unless corrupting agent.
+lemma helper_tls_Cannot_Send_As_Honest_Server_2[reuse]:
+  "All A C S id m #i #j.
+    (Adversary_Sends_as_Server(A, id, m) @ i
+    & Client_Starts_TLS(C, S, id) @ j)
+    ==>
+    (Ex #k. Compromise_Agent(S) @ k)
+  "
+
+// Session id is not availabe to the adversary, even it it started the session.
+lemma helper_tls_Session_Id_Secrecy[reuse]:
+  "All C S id #i.
+    Client_Starts_TLS(C, S, id) @ i
+    ==>
+    not (Ex #j. KU(id) @ j)
+  "
+
+// Adversary can't find out long term keys of honest parties.
+lemma helper_Long_Term_Key_Secrecy[reuse]:
+"All A ltk #i #k.
+  ((Agent_Key(A, ltk) @ i & KU(ltk) @ k)
+  ==> (Ex #j. Compromise_Agent(A) @ j))
+"
+
+// Client secret remains secret if it registers it at an honest IdP. 
+lemma helper_Client_Secret_Secrecy[reuse]:
+  "All C I id s #i #k.
+    ((Register_Client_at_IdP(C, I, id, s) @ i & KU(s) @ k)
+    ==> F)
+  "
+
+#endif
+
+// Sanity checking lemmas
+// ======================
+// Here, we test that the protocol can be executed with various combinations of
+// honest and compromised agents.
+
+#ifdef INCLUDE_EXECUTABLE
+
+lemma executable:
+  exists-trace
+    "Ex C S I #i. ClientFinish(C, S, I) @ i" 
+
+lemma executable_honest_all:
+  exists-trace
+    "Ex C S I #i #j #k #l. ClientFinish(C, S, I) @ i & Initialize_Client(C) @ j & Initialize_SP(S) @ k & Initialize_IdP(I) @ l"
+
+lemma executable_honest_c_corrupt_s:
+  exists-trace
+    "Ex C S I #i #j #k. ClientFinish(C, S, I) @ i & Compromise_Agent(S) @ j & Initialize_IdP(I) @ k"
+
+lemma executable_honest_c_corrupt_i:
+  exists-trace
+   "Ex C S I #i #j #k. ClientFinish(C, S, I) @ i & Compromise_Agent(I) @ j & Initialize_SP(S) @ k"
+
+lemma executable_honest_c_corrupt_i_s:
+  exists-trace
+   "Ex C S I #i #j #k. ClientFinish(C, S, I) @ i & Compromise_Agent(I) @ j & Compromise_Agent(S) @ k"
+
+lemma executable_honest_s_corrupt_c:
+  exists-trace
+    "Ex C S I #i #j #k. SPFinish(S, C, I) @ i & Compromise_Agent(C) @ j & Initialize_IdP(I) @ k"
+ 
+lemma executable_honest_s_corrupt_c_i:
+  exists-trace
+    "Ex C S I #i #j #k. SPFinish(S, C, I) @ i & Compromise_Agent(C) @ j & Compromise_Agent(I) @ k"
+
+lemma executable_honest_i_corrupt_c:
+  exists-trace
+   "Ex C S I #i #j #k. IDPFinish(C, S, I) @ i & Compromise_Agent(C) @ j & Initialize_SP(S) @ k"
+
+lemma executable_honest_i_corrupt_s:
+  exists-trace
+   "Ex C S I #i #j #k. IDPFinish(C, S, I) @ i & Compromise_Agent(S) @ j & Initialize_Client(C) @ k"
+
+lemma executable_honest_i_corrupt_s_c:
+  exists-trace
+   "Ex C S I #i #j #k. IDPFinish(C, S, I) @ i & Compromise_Agent(S) @ j & Compromise_Agent(C) @ k"
+
+#endif
+
+// Security properties
+// ===================
+
+// Properties from the PoV of Client
+// =================================
+
+// If a client C completes the protocol with the service provider S obtaining
+// resource res at url. then that resource res was registered by the client at S.
+// This holds except if a) the service provider is compromised or b) service
+// provider has established trust with a compromised identity provider.
+lemma sec_Client_Resource_Authenticity:
+  "All C S I cid csid url res ts #i.
+    Client_Params(C, S, I, cid, csid, <res, url, ts>) @ i
+    ==>
+    ( Ex #j. Register_Resource_at_SP(C, S, cid, res, url) @ j )
+    | ( Ex #j. Compromise_Agent(S) @ j )
+    | ( Ex I #j #k. Compromise_Agent(I) @ j & Register_SP_at_IdP(S, I) @ k)
+  "
+
+// Same as above, but only assuming the specific IdP used in the session is honest.
+lemma sec_Client_Resource_Authenticity_Strong:
+  "All C S I cid csid url res ts #i.
+    Client_Params(C, S, I, cid, csid, <res, url, ts>) @ i
+    ==>
+    ( Ex #j. Register_Resource_at_SP(C, S, cid, res, url) @ j )
+    | ( Ex #j. Compromise_Agent(S) @ j )
+    | ( Ex #j. Compromise_Agent(I) @ j )
+  "
+
+// If a client C registers resource res at service provider, then res remains
+// unkonwn to the adversary except if: a) the service provider is compromised or b)
+// service provider has established trust with a compromised identity provider.
+lemma sec_Client_Registered_Resource_Secrecy:
+  "All C S url res id #i.
+  Register_Resource_at_SP(C, S, id, res, url) @ i
+  ==>
+  ( not (Ex #j. K(res) @ j) )
+  | ( Ex #j. Compromise_Agent(S) @ j )
+  | ( Ex I #j #k. Compromise_Agent(I) @ j & Register_SP_at_IdP(S, I) @ k )
+  "
+
+// Same as above, but only assuming SP is honest. This should trivially fail. 
+lemma sec_Client_Registered_Resource_Secrecy_Strong:
+  "All C S url res id #i.
+  Register_Resource_at_SP(C, S, id, res, url) @ i
+  ==>
+  ( not (Ex #j. K(res) @ j) )
+  | ( Ex #j. Compromise_Agent(S) @ j )
+  "
+
+// The temporary secret received in a specific session should remain unkonwn to the
+// adversary except if: a) the service provider is compromised or b) service
+// provider has established trust with a compromised identity provider."
+lemma sec_Client_Resource_Secrecy:
+   "All C S I cid csid url res ts #i.
+     Client_Params(C, S, I, cid, csid, <res, url, ts>) @ i
+     ==>
+     ( not (Ex #j. K(ts) @ j) )
+     | ( Ex #j. Compromise_Agent(S) @ j )
+     | ( Ex I #j #k. Compromise_Agent(I) @ j & Register_SP_at_IdP(S, I) @ k)
+   "
+
+// Same as above, but only assuming the specific IdP used in the session is honest
+lemma sec_Client_Resource_Secrecy_Strong:
+  "All C S I cid csid url res ts #i.
+    Client_Params(C, S, I, cid, csid, <res, url, ts>) @ i
+    ==>
+    ( not (Ex #j. K(ts) @ j) )
+    | ( Ex #j. Compromise_Agent(S) @ j )
+    | ( Ex #j. Compromise_Agent(I) @ j )
+  "
+
+// If a client C with id cid completes the protocol with the service provider S and
+// obtains resource res, then the resource was issued by S after C has requested
+// it. Note that there doesn't have to be agreement on the IdP used or the clientId
+// which the resource was provided to.
+lemma sec_Client_Resource_Freshness:
+  "All C S I A cid csid url res ts #i #j.
+    ( Client_Artifact_Redirect(C, S, I, csid, A) @ i 
+      & Client_Params(C, S, I, cid, csid, <res, url, ts>) @ j )
+    ==>
+    ( Ex I1 cid1 ida #k. SP_Params_Client(S, I1, cid1, <res, url, ts>, ida) @ k
+      & i < k
+      & k < j )
+    | ( Ex #k. Compromise_Agent(S) @ k)
+  "
+
+// If a client C with id cid completes the protocol with the service provider S and
+// identity provider I obtaining resource res at url, then S has completed a
+// protocol with cid and the session parameters match or either S or I are
+// compromised. This holds except if: a) the service provider is compromised or b)
+// service provider has established trust with a compromised identity provider.
+lemma sec_Client_SP_Non_Injective_Agreement:
+  "All C S I cid csid url res ts #i.
+    Client_Params(C, S, I, cid, csid, <res, url, ts>) @ i
+    ==>
+    ( Ex #k ida. SP_Params_Client(S, I, cid, <res, url, ts>, ida) @ k )
+    | ( Ex #j. Compromise_Agent(S) @ j )
+    | ( Ex I #j #k. Compromise_Agent(I) @ j & Register_SP_at_IdP(S, I) @ k)
+  "
+
+// Same as above, but only assuming the specific IdP used in the session is honest
+lemma sec_Client_SP_Non_Injective_Agreement_Strong:
+  "All C S I cid csid url res ts #i.
+    Client_Params(C, S, I, cid, csid, <res, url, ts>) @ i
+    ==>
+    ( Ex #k ida. SP_Params_Client(S, I, cid, <res, url, ts>, ida) @ k )
+    | ( Ex #j. Compromise_Agent(S) @ j )
+    | ( Ex #j. Compromise_Agent(I) @ j )
+  "
+
+
+// Similar to non-injective agrement, but additionally there must be a single
+// client session with parameters (resource and clientId) corresponding to the SP
+// session.
+lemma sec_Client_SP_Injective_Agreement:
+  "All C S I cid csid url res ts #i.
+    Client_Params(C, S, I, cid, csid, <res, url, ts>) @ i
+    ==>
+    ( Ex #k ida. SP_Params_Client(S, I, cid, <res, url, ts>, ida) @ k 
+      & not ( Ex csid1 I1 #i1. Client_Params(C, S, I1, cid, csid1, <res, url, ts>) @ i1 & not #i = #i1 ) ) 
+    | ( Ex #j. Compromise_Agent(S) @ j )
+    | ( Ex I #j #k. Compromise_Agent(I) @ j & Register_SP_at_IdP(S, I) @ k)
+  "
+
+// Same as above, but only assuming the specific IdP used in the session is honest
+lemma sec_Client_SP_Injective_Agreement_Strong:
+  "All C S I cid csid url res ts #i.
+    Client_Params(C, S, I, cid, csid, <res, url, ts>) @ i
+    ==>
+    ( Ex #k ida. SP_Params_Client(S, I, cid, <res, url, ts>, ida) @ k 
+      & not ( Ex csid1 I1 #i1. Client_Params(C, S, I1, cid, csid1, <res, url, ts>) @ i1 & not #i = #i1 ) ) 
+    | ( Ex #j. Compromise_Agent(S) @ j )
+    | ( Ex #j. Compromise_Agent(I) @ j)
+  "
+
+// Properties from the PoV of SP
+// ==============================
+
+// If a service provider S provides a resource to a client with ID cid, then res
+// remains unknown to the adversary except if: a) the client with that cid is
+// compromised or b) service provider has established trust with a compromised
+// identity provider.
+lemma sec_SP_Client_Resource_Secrecy:
+   "All S I url res cid ts ida #i.
+   SP_Params_Client(S, I, cid, <res, url, ts>, ida) @ i
+   ==>
+   ( not ( Ex #k. K(ts) @ k ) )
+   | ( Ex C #k #l. Compromise_Agent(C) @ k & Agent_ID(C, cid) @ l )
+   | ( Ex I #k #l. Compromise_Agent(I) @ k & Register_SP_at_IdP(S, I) @ l )
+   "
+
+// Same as above, but only assuming the specific IdP used in the session is honest
+lemma sec_SP_Client_Resource_Secrecy_Strong:
+   "All S I url res cid ts ida #i.
+   SP_Params_Client(S, I, cid, <res, url, ts>, ida) @ i
+   ==>
+   ( not ( Ex #k. K(ts) @ k ) )
+   | ( Ex C #k #l. Compromise_Agent(C) @ k & Agent_ID(C, cid) @ l )
+   | ( Ex #k. Compromise_Agent(I) @ k )
+   "
+
+// If a service provider S  completes the protocol with a client with client ID cid
+// and identity provider I, then C has completed a protocol with cid and the
+// session parameters match or, a) C is compromised or b) S trusts some compromised
+// identity provider.
+lemma sec_SP_Client_Non_Injective_Agreement:
+  "All C S I url res cid ts ida #i #j.
+  ( SP_Params_Client(S, I, cid, <res, url, ts>, ida) @ i 
+    & Agent_ID(C, cid) @ j )
+    ==>
+    ( Ex csid #k #l. 
+        Client_Resource_Request(C, S, csid, url) @ k
+        & Client_Artifact_Redirect(C, S, I, csid, I) @ l )
+    | ( Ex #k. Compromise_Agent(C) @ k )
+    | ( Ex I #k #l. Compromise_Agent(I) @ k & Register_SP_at_IdP(S, I) @ l )
+  "
+
+// Same as above, but only assuming the specific IdP used in the session is honest
+lemma sec_SP_Client_Non_Injective_Agreement_Strong:
+  "All C S I url res cid ts ida #i #j.
+  ( SP_Params_Client(S, I, cid, <res, url, ts>, ida) @ i 
+    & Agent_ID(C, cid) @ j )
+    ==>
+    ( Ex csid #k #l. 
+        Client_Resource_Request(C, S, csid, url) @ k
+        & Client_Artifact_Redirect(C, S, I, csid, I) @ l )
+    | ( Ex #k. Compromise_Agent(C) @ k )
+    | ( Ex #k. Compromise_Agent(I) @ k )
+  "
+
+// If service provider S completes a protocol with client with id cid and identity
+// provider I, then that I has completed a protocol and authenticated a client cid.
+// Other parameters do not have to match. Alternativelly, S trusts some compromised
+// identity provider.
+lemma sec_SP_IdP_Weak_Agreement:
+  "All S I cid ida mh idr #i.
+    ( SP_Params_IdP(S, I, cid, ida, mh, idr) @ i )
+    ==>
+    ( Ex S1 ida1 mh1 idr1 #j. IdP_Params(I, S1, cid, ida1, mh1, idr1) @ j )
+    | ( Ex I #j #k. Compromise_Agent(I) @ j & Register_SP_at_IdP(S, I) @ k ) 
+  "
+  
+// Same as above, but only assuming the specific IdP used in the session is honest
+lemma sec_SP_IdP_Weak_Agreement_Strong:
+  "All S I cid ida mh idr #i.
+    ( SP_Params_IdP(S, I, cid, ida, mh, idr) @ i )
+    ==>
+    ( Ex S1 ida1 mh1 idr1 #j. IdP_Params(I, S1, cid, ida1, mh1, idr1) @ j )
+    | ( Ex #j. Compromise_Agent(I) @ j ) 
+  "
+
+// If service provider S completes a protocol with client with id cid and identity
+// provider I, then that I has completed a protocol and authenticated a client cid
+// and all other parameters have to match. Alternativelly, S trusts some
+// compromised identity provider.
+lemma sec_SP_IdP_Non_Injective_Agreement:
+  "All S I cid ida mh idr #i.
+    ( SP_Params_IdP(S, I, cid, ida, mh, idr) @ i )
+    ==>
+    ( Ex #j. IdP_Params(I, S, cid, ida, mh, idr) @ j )
+    | ( Ex I #j #k. Compromise_Agent(I) @ j & Register_SP_at_IdP(S, I) @ k ) 
+  "
+
+// Same as above, but only assuming the specific IdP used in the session is honest
+lemma sec_SP_IdP_Non_Injective_Agreement_Strong:
+  "All S I cid ida mh idr #i.
+    ( SP_Params_IdP(S, I, cid, ida, mh, idr) @ i )
+    ==>
+    ( Ex #j. IdP_Params(I, S, cid, ida, mh, idr) @ j )
+    | ( Ex #j. Compromise_Agent(I) @ j ) 
+  "
+
+// Similar to non-injective agreement but the authentication is fresh in the sense
+// that it happened after the SP has sent the authentication request.
+lemma sec_SP_IdP_Authentication_Freshness:
+  "All S I cid ida mh idr url #i #j.
+    ( SP_Params_IdP(S, I, cid, ida, mh, idr) @ i 
+      & SP_Resource_Request(S, I, ida, url) @ j )
+    ==>
+    ( ( Ex #k. IdP_Client_Authentication(I, cid, <'AuthnRequest', ida, S, I>) @ k
+        & j < k)
+    | ( Ex I #j #k. Compromise_Agent(I) @ j & Register_SP_at_IdP(S, I) @ k ) )
+  "
+
+// Same as above, but only assuming the specific IdP used in the session is honest
+lemma sec_SP_IdP_Authentication_Freshness_Strong:
+  "All S I cid ida mh idr url #i #j.
+    ( SP_Params_IdP(S, I, cid, ida, mh, idr) @ i 
+      & SP_Resource_Request(S, I, ida, url) @ j )
+    ==>
+    ( ( Ex #k. IdP_Client_Authentication(I, cid, <'AuthnRequest', ida, S, I>) @ k
+        & j < k)
+      | ( Ex #j. Compromise_Agent(I) @ j ) 
+    )
+  "
+
+// If a service provider S accepts an assertion, then that assertion is not known
+// to the adversary unless service provider has established trust with a compromised
+// identity provider.
+lemma sec_SP_IdP_Assertion_Secrecy:
+  "All S I sec #i.
+  ( SP_Assertion_Secret(S, I, sec) @ i )
+  ==>
+  ( not ( Ex #k. K(sec) @ k ) )
+  | ( Ex I #k #l. Compromise_Agent(I) @ k & Register_SP_at_IdP(S, I) @ l )
+  "
+
+// Same as above, but only assuming the specific IdP used in the session is honest
+lemma sec_SP_IdP_Assertion_Secrecy_Strong:
+  "All S I sec #i.
+    ( SP_Assertion_Secret(S, I, sec) @ i )
+    ==>
+    ( not ( Ex #k. K(sec) @ k ) )
+    | ( Ex #k. Compromise_Agent(I) @ k )
+  "
+
+  
+// Properties from the PoV of IdP
+// ==============================
+
+// If an identity provider I has completed the protocol and issued an assertion to
+// S, then S has issued the corresponding AuthnRequest and has chosen I as the
+// identity provider. Alternativelly, S is compromised.
+lemma sec_IdP_SP_Non_Injective_Pre_Agreement:
+  "All I S cid ida mh idr #i.
+    ( IdP_Params(I, S, cid, ida, mh, idr) @ i ) 
+    ==>
+    ( Ex url #j. SP_Resource_Request(S, I, ida, url) @ j )
+    | ( Ex #j. Compromise_Agent(S) @ j ) 
+  "
+
+// If an identity provider I has completed the protocol and issued an assertion to
+// S, then S has issued the corresponding AuthnRequest chosing I as the identity
+// provider, and also requested the artifact that I resolved. Alternativelly, S is
+// compromised.
+lemma sec_IdP_SP_Weak_Agreement:
+  "All I S cid ida mh idr #i.
+    ( IdP_Params(I, S, cid, ida, mh, idr) @ i ) 
+    ==>
+    ( Ex ida1 #j. SP_Resource_Request_With_Artifact(S, I, ida1, mh) @ j )
+    | ( Ex #j. Compromise_Agent(S) @ j ) 
+  "
+
+// If an identity provider I has completed the protocol and issued an assertion to
+// S, then S has issued the corresponding AuthnRequest chosing I as the identity
+// provider and also requested the artifact that I resolved (hence I and S agree on
+// the parameters of the AuthnRequest and the Artifact. Alternativelly, S is
+// compromised.
+lemma sec_IdP_SP_Non_Injective_Agreement:
+  "All I S cid ida mh idr #i.
+    ( IdP_Params(I, S, cid, ida, mh, idr) @ i ) 
+    ==>
+    ( Ex #j. SP_Resource_Request_With_Artifact(S, I, ida, mh) @ j )
+    | ( Ex #j. Compromise_Agent(S) @ j ) 
+  "
+
+// In addition to non-injective agreement, thare are no two sessions of IdP that
+// agree with S on the Artifact.
+lemma sec_IdP_SP_Injective_Agreement:
+  "All I S cid ida mh idr #i.
+    ( IdP_Params(I, S, cid, ida, mh, idr) @ i ) 
+    ==>
+    ( Ex #j. SP_Resource_Request_With_Artifact(S, I, ida, mh) @ j 
+      & not ( Ex I S1 cid1 ida1 idr1 #i1. IdP_Params(I, S1, cid1, ida1, mh, idr1) @ i1 & not #i = #i1 ) )
+    | ( Ex #j. Compromise_Agent(S) @ j ) 
+  "
+
+// Assertion that identity provider I issues to service provider S is unknown to
+// the adversary, unless S is compromised.
+lemma sec_IdP_SP_Assertion_Secrecy:
+  "All S I sec #i.
+    ( IdP_Assertion_Secret(I, S, sec) @ i )
+    ==>
+    ( not ( Ex #k. K(sec) @ k ) )
+    | ( Ex #k. Compromise_Agent(S) @ k )
+  "
+
+end

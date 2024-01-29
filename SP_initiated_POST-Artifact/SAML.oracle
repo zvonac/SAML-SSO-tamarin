@@ -1,0 +1,197 @@
+#!/usr/bin/python
+
+import sys
+import re
+
+lines = sys.stdin.readlines()
+lemma = sys.argv[1]
+
+maxPriority = 20 
+
+rank = []
+for i in range(0, maxPriority):
+  rank.append([])
+
+## EXECUTABILITY LEMMAS
+if lemma.startswith('executable'):
+  for line in lines:
+    num, rest = line.split(': ')
+    rest = rest.replace(' ', '')
+    if rest.startswith('!Ltk('): rank[11].append(num)
+    elif rest.startswith('!Pk('): rank[11].append(num)
+    elif rest.startswith('Agent_Initialized('): rank[11].append(num)
+    elif rest.startswith('!ClientID('): rank[11].append(num)
+    elif rest.startswith('!SP_Initialized('): rank[11].append(num)
+    elif rest.startswith('Client_State'): rank[10].append(num)
+    elif rest.startswith('IdP_State'): rank[10].append(num)
+    elif rest.startswith('SP_State'): rank[10].append(num)
+    elif rest.startswith('ClientFinish('): rank[10].append(num)
+    elif rest.startswith('SPFinish('): rank[10].append(num)
+    elif rest.startswith('IDPFinish('): rank[10].append(num)
+    elif rest.startswith('ResolvesFor('): rank[10].append(num)
+    elif rest.count('Register_Resource_at_SP'): rank[9].append(num)
+    elif rest.startswith('!KU(https_request('): rank[8].append(num)
+    elif rest.startswith('!KU(https_response('): rank[8].append(num)
+    elif rest.startswith('!KU(sign('): rank[7].append(num)
+    elif rest.startswith('!Client_Registered_at_IdP('): rank[6].append(num)
+    elif rest.startswith('!Is_Resource('): rank[6].append(num)
+    elif rest.startswith('!KU(~clientSecret'): rank[6].append(num)
+    elif rest.startswith('Honest('): rank[5].append(num)
+    elif rest.startswith('!Client_Has_Resource('): rank[6].append(num)
+    elif rest.startswith('!KU(~res'): rank[5].append(num)
+    elif rest.startswith('!KU(~assertion_secret'): rank[5].append(num)
+    elif rest.startswith('!KU(~rs'): rank[4].append(num)
+    elif rest.startswith('!KU(~clientID'): rank[3].append(num)
+    elif rest.startswith('!KU(~url'): rank[5].append(num)
+    elif rest.startswith('!KU(~messageHandle'): rank[4].append(num)
+    elif rest.startswith('New_Server_TLS_Session('): rank[3].append(num)
+    elif rest.startswith('New_Client_TLS_Session('): rank[3].append(num)
+    elif rest.startswith('!KU(~id'): rank[2].append(num)
+    elif rest.startswith('!KU(~ltk'): rank[1].append(num)
+    elif rest.startswith('!KU(~ts'): rank[1].append(num)
+    else:
+      print("WARNING: Unknown {}".format(rest))
+      rank[0].append(num)
+
+elif lemma == 'sec_Client_Registered_Resource_Secrecy':
+  for line in lines:
+    num, rest = line.split(': ')
+    rest = rest.replace(' ', '')
+    if rest.startswith('!ClientID'): rank[14].append(num)
+    elif rest.count('!Client_Initialized('): rank[16].append(num)
+    elif rest.startswith('!SP_Initialized('): rank[15].append(num)
+    elif re.match('.*Register_Resource_at_SP.*', line): rank[13].append(num)
+    elif rest.startswith('Agent_Initialized('): rank[12].append(num)
+    elif rest.startswith('!KU(~res'): rank[11].append(num)
+    elif rest.startswith('!KU(sign('): rank[10].append(num)
+    elif rest.startswith('!KU(https_response('): rank[9].append(num)
+    elif rest.startswith('!KU(https_request('): rank[8].append(num)
+    elif rest.startswith('!KU('): rank[7].append(num)
+    else: rank[2].append(num)
+
+elif lemma == 'sec_Client_Registered_Resource_Secrecy_Strong':
+  for line in lines:
+    num, rest = line.split(': ')
+    rest = rest.replace(' ', '')
+    first = rest
+    if '@' in first:
+      first = first.split('@')[0]
+    if first.count('.1') or first.count('.2') or first.count('.3') or first.count('.4'):
+      exit(0)
+    if rest.startswith('!ClientID'): rank[14].append(num)
+    elif rest.count('!Client_Initialized('): rank[16].append(num)
+    elif rest.startswith('!SP_Initialized('): rank[15].append(num)
+    elif re.match('.*Register_Resource_at_SP.*', line): rank[13].append(num)
+    elif rest.startswith('Agent_Initialized('): rank[12].append(num)
+    elif rest.startswith('!KU(~res)'): rank[11].append(num)
+    elif rest.startswith('!KU(sign('): rank[10].append(num)
+    elif rest.startswith('!KU(https_response('): rank[9].append(num)
+    elif rest.startswith('!KU(https_request('): rank[8].append(num)
+    elif rest.startswith('!KU(~ltk)'): rank[7].append(num)
+    elif rest.startswith('!KU(~rs)'): rank[6].append(num)
+    elif rest.startswith('!KU(~messageHandle)'): rank[5].append(num)
+    elif rest.startswith('!KU(~id_response)'): rank[4].append(num)
+    elif rest.startswith('!KU(~id_assertion)'): rank[4].append(num)
+    elif rest.startswith('!KU(~assertion_secret)'): rank[4].append(num)
+    elif rest.startswith('!KU(~id_authnrequest)'): rank[3].append(num)
+    elif rest.startswith('!KU(~id_artifactresolve)'): rank[2].append(num)
+    else: rank[2].append(num)
+
+elif lemma.startswith('sec_Client_Resource_Secrecy') or lemma.startswith('sec_SP_Client_Resource_Secrecy'):
+  for line in lines:
+    num, rest = line.split(': ')
+    rest = rest.replace(' ', '')
+    first = rest
+    if '@' in first:
+      first = first.split('@')[0]
+    if  first.count('.2') or first.count('.3') or first.count('.4'):
+      exit(0)
+    if re.match('.*Register_Resource_at_SP.*', rest): rank[18].append(num)
+    elif re.match('.*Register_SP_at_IdP.*', rest): rank[18].append(num)
+    elif rest.startswith('!ClientID'): rank[17].append(num)
+    elif rest.count('!Client_Initialized('): rank[16].append(num)
+    elif rest.startswith('!SP_Initialized('): rank[15].append(num)
+    elif rest.startswith('Client_State'): rank[14].append(num)
+    elif rest.startswith('Agent_Initialized('): rank[12].append(num)
+    elif rest.startswith('!Ltk('): rank[12].append(num)
+    elif rest.startswith('!Is_Agent('): rank[12].append(num)
+    elif rest.startswith('!KU(~ltk'): rank[11].append(num)
+    elif rest.startswith('!KU(sign('): rank[11].append(num)
+    elif re.match('^\!KU\(https_response\(.*sign\(.*', rest): rank[10].append(num)
+    elif re.match('^\!KU\(https_request\(.*sign\(.*', rest): rank[10].append(num)
+    elif rest.startswith('!KU(https_response('): rank[9].append(num)
+    elif rest.startswith('!KU(https_request('): rank[8].append(num)
+    elif rest.startswith('!KU(~ts_res'): rank[7].append(num)
+    elif rest.startswith('!KU('): rank[3].append(num)
+    else: rank[2].append(num)
+
+elif lemma.startswith('sec_SP_Client_Non_Injective_Agreement'):
+  for line in lines:
+    num, rest = line.split(': ')
+    rest = rest.replace(' ', '')
+    first = rest
+    if '@' in first:
+      first = first.split('@')[0]
+    if first.count('.2') or first.count('.3') or first.count('.4'):
+      exit(0)
+    if rest.startswith('!Client_Has_Resource('): rank[19].append(num)
+    elif re.match('.*Register_Resource_at_SP.*', rest): rank[18].append(num)
+    elif re.match('.*Register_SP_at_IdP.*', rest): rank[18].append(num)
+    elif rest.startswith('!ClientID'): rank[17].append(num)
+    elif rest.count('!Client_Initialized('): rank[16].append(num)
+    elif rest.startswith('!SP_Initialized('): rank[15].append(num)
+    elif rest.startswith('Agent_Initialized('): rank[12].append(num)
+    elif rest.startswith('!Ltk('): rank[12].append(num)
+    elif rest.startswith('!Is_Agent('): rank[12].append(num)
+    elif rest.startswith('!KU(~ltk'): rank[11].append(num)
+    elif rest.startswith('!KU(sign('): rank[10].append(num)
+    elif re.match('^\!KU\(https_response\(.*sign\(.*', rest): rank[10].append(num)
+    elif re.match('^\!KU\(https_request\(.*sign\(.*', rest): rank[10].append(num)
+    elif rest.startswith('!KU(https_request($SP'): rank[9].append(num)
+    elif rest.startswith('SP_State'): rank[8].append(num)
+    elif rest.startswith('!KU(https_request('): rank[7].append(num)
+    elif rest.startswith('!KU(https_response('): rank[7].append(num)
+    elif rest.startswith('!KU(~res'): rank[6].append(num)
+    elif rest.startswith('!KU(~clientSecret'): rank[5].append(num)
+    elif rest.startswith('!KU('): rank[6].append(num)
+    else: rank[2].append(num)
+
+elif lemma.count('sec_IdP_SP') or lemma.count('sec_SP_IdP'):
+  for line in lines:
+    num, rest = line.split(': ')
+    rest = rest.replace(' ', '')
+    if rest.count('SP_Signs_ArtifactResolve'): rank[16].append(num)
+    elif rest.count('SP_Resource_Request_With_Artifact'): rank[16].append(num)
+    elif rest.startswith('IdP_State'): rank[15].append(num)
+    elif rest.startswith('Client_State'): rank[14].append(num)
+    elif rest.startswith('SP_State'): rank[13].append(num)
+    elif rest.startswith('!KU(sign('): rank[10].append(num)
+    elif rest.startswith('!KU(https_response('): rank[9].append(num)
+    elif rest.startswith('!KU(https_request('): rank[8].append(num)
+    elif rest.startswith('!KU(~ltk'): rank[7].append(num)
+    else: rank[2].append(num)
+
+elif lemma.count('sec_Client'):
+  for line in lines:
+    num, rest = line.split(': ')
+    rest = rest.replace(' ', '') 
+    if rest.count('SP_Signs_ArtifactResolve'): rank[16].append(num)
+    elif rest.count('SP_Resource_Request_With_Artifact'): rank[16].append(num)
+    elif rest.startswith('IdP_State'): rank[15].append(num)
+    elif rest.startswith('Client_State'): rank[14].append(num)
+    elif rest.startswith('SP_State'): rank[13].append(num)
+    elif rest.startswith('!KU(sign('): rank[10].append(num)
+    elif rest.startswith('!KU(https_response('): rank[9].append(num)
+    elif rest.startswith('!KU(https_request('): rank[8].append(num)
+    elif rest.startswith('!IsAgent('): rank[7].append(num)
+    else: rank[2].append(num)
+
+## UNEXPECTED LEMMAS
+else:
+  print("Unexpected lemma: {}".format(lemma))
+  exit(0)
+
+for goalList in reversed(rank):
+  for goal in goalList:
+    sys.stderr.write(goal)
+    print(goal)

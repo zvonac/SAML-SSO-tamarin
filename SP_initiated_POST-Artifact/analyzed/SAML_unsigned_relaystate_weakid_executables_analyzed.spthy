@@ -1,0 +1,2180 @@
+theory SAML_unsigned_relaystate_weakid begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, https_request/3 [private], https_response/2 [private],
+           pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+rule (modulo E) Initialize_Agent:
+   [ Fr( ~ltk ), Fr( ~clientID ) ]
+  --[
+  Initialize_Agent( $Agent ), Agent_Key( $Agent, ~ltk ),
+  Agent_ID( $Agent, ~clientID )
+  ]->
+   [
+   Agent_Initialized( $Agent ), !Is_Agent( $Agent ),
+   !Pk( $Agent, pk(~ltk) ), !Ltk( $Agent, ~ltk ),
+   !ClientID( $Agent, ~clientID ), Out( pk(~ltk) ), Out( ~clientID )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Compromise_Agent[color=#f5b7b1]:
+   [ Agent_Initialized( $Agent ), !Ltk( $Agent, ~ltk ) ]
+  --[ Compromise_Agent( $Agent ) ]->
+   [ !Agent_Compromised( $Agent ), Out( ~ltk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Initialize_SP[color=#e0ffff]:
+   [ Agent_Initialized( $SP ) ]
+  --[ Initialize_SP( $SP ) ]->
+   [ !SP_Initialized( $SP ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Initialize_IdP[color=#fafad2]:
+   [ Agent_Initialized( $IdP ) ]
+  --[ Initialize_IdP( $IdP ) ]->
+   [ !IdP_Initialized( $IdP ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Initialize_Client[color=#add8e6]:
+   [ Agent_Initialized( $C ) ]
+  --[ Initialize_Client( $C ) ]->
+   [ !Client_Initialized( $C ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Register_Client_at_IdP[color=#add8e6]:
+   [
+   !Client_Initialized( $C ), !IdP_Initialized( $IdP ),
+   !ClientID( $C, ~clientID ), Fr( ~clientSecret )
+   ]
+  --[ Register_Client_at_IdP( $C, $IdP, ~clientID, ~clientSecret ) ]->
+   [ !Client_Registered_at_IdP( $IdP, ~clientID, ~clientSecret ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Adversary_Register_Client_at_IdP[color=#f5b7b1]:
+   [
+   !Agent_Compromised( $C ), !IdP_Initialized( $IdP ),
+   !ClientID( $C, ~clientID ), Fr( ~clientSecret )
+   ]
+  --[
+  Adversary_Register_Client_at_IdP( $C, $IdP, ~clientID, ~clientSecret )
+  ]->
+   [
+   !Client_Registered_at_IdP( $IdP, ~clientID, ~clientSecret ),
+   Out( ~clientSecret )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Register_Client_at_Compromised_IdP[color=#f5b7b1]:
+   [
+   !Client_Initialized( $C ), !Agent_Compromised( $IdP ),
+   !ClientID( $C, ~clientID ), Fr( ~clientSecret )
+   ]
+  --[
+  Register_Client_at_Compromised_IdP( $C, $IdP, ~clientID, ~clientSecret )
+  ]->
+   [
+   !Client_Registered_at_IdP( $IdP, ~clientID, ~clientSecret ),
+   Out( ~clientSecret )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Register_Resource_at_SP[color=#fafad2]:
+   [
+   !Client_Initialized( $C ), !SP_Initialized( $SP ),
+   !ClientID( $C, ~clientID ), Fr( ~res )
+   ]
+  --[ Register_Resource_at_SP( $C, $SP, ~clientID, ~res, $url ) ]->
+   [
+   !Client_Has_Resource( $SP, ~clientID, $url, ~res ),
+   !Is_Resource( $url, $SP )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Adversary_Register_Resource_at_SP[color=#fafad2]:
+   [
+   !Agent_Compromised( $C ), !SP_Initialized( $SP ),
+   !ClientID( $C, ~clientID ), Fr( ~res )
+   ]
+  --[ Adversary_Register_Resource_at_SP( $C, $SP, ~clientID, ~res, $url )
+  ]->
+   [
+   !Client_Has_Resource( $SP, ~clientID, $url, ~res ), Out( ~res ),
+   !Is_Resource( $url, $SP )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Register_Resource_at_Compromised_SP[color=#fafad2]:
+   [ !Agent_Compromised( $SP ) ]
+  --[ Register_Resource_at_Compromised_SP( $SP, $url ) ]->
+   [ !Is_Resource( $url, $SP ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Register_SP_at_IdP[color=#fafad2]:
+   [ !Is_Agent( $SP ), !Is_Agent( $IdP ) ]
+  --[ Register_SP_at_IdP( $SP, $IdP ) ]->
+   [ !Is_Registered( $SP, $IdP ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Starts_TLS:
+   [ Fr( ~tls_session_id ), !Is_Agent( $Client ), !Is_Agent( $Server ) ]
+  --[ Client_Starts_TLS( $Client, $Server, ~tls_session_id ) ]->
+   [
+   New_Client_TLS_Session( $Client, $Server, ~tls_session_id ),
+   New_Server_TLS_Session( $Server, ~tls_session_id )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Adversary_Sends_as_Client[color=#f5b7b1]:
+   [
+   In( message ),
+   New_Client_TLS_Session( $Agent, $Server, ~tls_session_id ),
+   !Agent_Compromised( $Agent )
+   ]
+  -->
+   [
+   Out( https_request($Server, ~tls_session_id, message) ),
+   St_Adversary_Client_TLS_Session( ~tls_session_id )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Adversary_Receives_as_Client[color=#f5b7b1]:
+   [
+   St_Adversary_Client_TLS_Session( ~tls_session_id ),
+   In( https_response(~tls_session_id, message) )
+   ]
+  --[
+  Adversary_Receives_as_Client( https_response(~tls_session_id, message) )
+  ]->
+   [ Out( message ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Adversary_Receives_as_Server[color=#f5b7b1]:
+   [
+   In( https_request($Agent, ~tls_session_id, message) ),
+   !Agent_Compromised( $Agent )
+   ]
+  --[
+  Adversary_Receives_as_Server( https_request($Agent, ~tls_session_id,
+                                              message)
+  )
+  ]->
+   [ Out( message ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Adversary_Sends_as_Server[color=#f5b7b1]:
+   [
+   In( message ), !Agent_Compromised( $Agent ),
+   New_Server_TLS_Session( $Agent, ~tls_session_id )
+   ]
+  --[ Adversary_Sends_as_Server( $Agent, ~tls_session_id, message ) ]->
+   [ Out( https_response(~tls_session_id, message) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Generate_New_Id:
+   [ Fr( ~id ) ]
+  --[ Generate_New_Id( ~id ) ]->
+   [ New_Id( ~id ), Out( ~id ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) SP_Resource_Request[color=#e0ffff]:
+   [
+   !SP_Initialized( $SP ), !Is_Resource( $url, $SP ),
+   !Is_Registered( $SP, $IdP ), !Ltk( $SP, ~ltkSP ),
+   New_Server_TLS_Session( $SP, ~tls_session_id_C_SP ),
+   In( https_request($SP, ~tls_session_id_C_SP, <'ResourceRequest', $url>)
+   ),
+   New_Id( ~id_authnrequest ), Fr( ~rs )
+   ]
+  --[
+  Start_SP( $SP ),
+  SP_Resource_Request( $SP, $IdP, ~id_authnrequest, $url ),
+  Https_Response( https_response(~tls_session_id_C_SP,
+                                 <$IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>, 'Signature'>)
+  )
+  ]->
+   [
+   SP_State_1( $SP, $IdP, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+               <~rs, $url>
+   ),
+   Out( https_response(~tls_session_id_C_SP,
+                       <$IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>, 'Signature'>)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) SP_Resource_Request_With_Artifact[color=#e0ffff]:
+   [
+   SP_State_1( $SP, $IdP, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+               <~rs, $url>
+   ),
+   !Ltk( $SP, ~ltkSP ), !Is_Resource( $url, $SP ),
+   New_Id( ~id_artifactresolve ),
+   New_Server_TLS_Session( $SP, ~client_ID_TLS_C_SP ),
+   In( https_request($SP, ~client_ID_TLS_C_SP,
+                     <<'Artifact', $IdP, ~messageHandle>, ~rs>)
+   ),
+   New_Client_TLS_Session( $SP, $IdP, ~client_ID_TLS_SP_IdP )
+   ]
+  --[
+  SP_Resource_Request_With_Artifact( $SP, $IdP, ~id_authnrequest,
+                                     ~messageHandle
+  ),
+  SP_Signs_ArtifactResolve( $SP,
+                            <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                             ~messageHandle>
+  ),
+  Https_Request( https_request($IdP, ~client_ID_TLS_SP_IdP,
+                               <
+                                <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                                 ~messageHandle>, 
+                                sign(<'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                                      ~messageHandle>,
+                                     ~ltkSP)
+                               >)
+  )
+  ]->
+   [
+   SP_State_2( $SP, $IdP, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+               $url,
+               <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                ~messageHandle>,
+               ~client_ID_TLS_C_SP, ~client_ID_TLS_SP_IdP
+   ),
+   Out( https_request($IdP, ~client_ID_TLS_SP_IdP,
+                      <
+                       <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                        ~messageHandle>, 
+                       sign(<'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                             ~messageHandle>,
+                            ~ltkSP)
+                      >)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) SP_Artifact_Resolution[color=#e0ffff]:
+   [
+   SP_State_2( $SP, $IdP, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+               $url,
+               <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                ~messageHandle>,
+               ~client_ID_TLS_C_SP, ~client_ID_TLS_SP_IdP
+   ),
+   !Ltk( $IdP, ~ltkIdP ),
+   !Client_Has_Resource( $SP, ~clientID, $url, ~res ), Fr( ~ts_res ),
+   In( https_response(~client_ID_TLS_SP_IdP,
+                      <
+                       <'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                        <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                         ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                         <'Audience', $SP>, ~assertion_secret>, 
+                        ResponseSignature>, 
+                       sign(<'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                             <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                              ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                              <'Audience', $SP>, ~assertion_secret>, 
+                             ResponseSignature>,
+                            ~ltkIdP)
+                      >)
+   )
+   ]
+  --[
+  SP_Params_Client( $SP, $IdP, ~clientID, <~res, $url, ~ts_res>,
+                    ~id_authnrequest
+  ),
+  SP_Params_IdP( $SP, $IdP, ~clientID, ~id_authnrequest, ~messageHandle,
+                 ~id_artifactresolve
+  ),
+  SP_Assertion_Secret( $SP, $IdP, ~assertion_secret ),
+  SPFinish( $SP, $C, $IdP ),
+  Https_Response( https_response(~client_ID_TLS_C_SP,
+                                 <~res, $url, ~ts_res>)
+  )
+  ]->
+   [ Out( https_response(~client_ID_TLS_C_SP, <~res, $url, ~ts_res>) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) IdP_Receive_Authentication_Request[color=#fafad2]:
+   [
+   !IdP_Initialized( $IdP ), !Is_Registered( $SP, $IdP ),
+   !Ltk( $SP, ~ltkSP ),
+   New_Server_TLS_Session( $IdP, ~tls_session_id_C_IdP ),
+   Fr( ~auth_session ),
+   In( https_request($IdP, ~tls_session_id_C_IdP,
+                     <$IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>, 'Signature'>)
+   )
+   ]
+  --[
+  Start_IdP( $IdP ),
+  Https_Response( https_response(~tls_session_id_C_IdP,
+                                 <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+  )
+  ]->
+   [
+   IdP_State_1( $IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+                ~auth_session
+   ),
+   Out( https_response(~tls_session_id_C_IdP,
+                       <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) IdP_Client_Authentication[color=#fafad2]:
+   [
+   IdP_State_1( $IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+                ~auth_session
+   ),
+   !Client_Registered_at_IdP( $IdP, ~clientID, ~clientSecret ),
+   Fr( ~messageHandle ),
+   New_Server_TLS_Session( $IdP, ~client_ID_TLS_C_IdP ),
+   In( https_request($IdP, ~client_ID_TLS_C_IdP,
+                     <'IAuthAndConsent', ~clientID, $SP, $IdP, ~clientSecret, ~auth_session>)
+   )
+   ]
+  --[
+  IdP_Client_Authentication( $IdP, ~clientID,
+                             <'AuthnRequest', ~id_authnrequest, $SP, $IdP>
+  ),
+  Https_Response( https_response(~client_ID_TLS_C_IdP,
+                                 <<'Artifact', $IdP, ~messageHandle>, ~rs>)
+  )
+  ]->
+   [
+   IdP_State_2( $IdP, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+                <'Artifact', $IdP, ~messageHandle>, ~clientID
+   ),
+   Out( https_response(~client_ID_TLS_C_IdP,
+                       <<'Artifact', $IdP, ~messageHandle>, ~rs>)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) IdP_Artifact_Resolution[color=#fafad2]:
+   [
+   IdP_State_2( $IdP, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+                <'Artifact', $IdP, ~messageHandle>, ~clientID
+   ),
+   !Ltk( $SP, ~ltkSP ), !Ltk( $IdP, ~ltkIdP ),
+   !Client_Registered_at_IdP( $IdP, ~clientID, ~clientSecret ),
+   New_Server_TLS_Session( $IdP, ~client_ID_TLS_SP_IdP ),
+   In( https_request($IdP, ~client_ID_TLS_SP_IdP,
+                     <
+                      <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                       ~messageHandle>, 
+                      sign(<'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                            ~messageHandle>,
+                           ~ltkSP)
+                     >)
+   ),
+   Fr( ~assertion_secret ), New_Id( ~id_assertion ), New_Id( ~id_response )
+   ]
+  --[
+  IDPFinish( $C, $SP, $IdP ),
+  IdP_Params( $IdP, $SP, ~clientID, ~id_authnrequest, ~messageHandle,
+              ~id_artifactresolve
+  ),
+  IdP_Assertion_Secret( $IdP, $SP, ~assertion_secret ),
+  Https_Response( https_response(~client_ID_TLS_SP_IdP,
+                                 <
+                                  <'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                                   <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                    ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                    <'Audience', $SP>, ~assertion_secret>, 
+                                   sign(<'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                         ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                         <'Audience', $SP>, ~assertion_secret>,
+                                        ~ltkIdP)
+                                  >, 
+                                  sign(<'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                                        <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                         ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                         <'Audience', $SP>, ~assertion_secret>, 
+                                        sign(<'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                              ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                              <'Audience', $SP>, ~assertion_secret>,
+                                             ~ltkIdP)
+                                       >,
+                                       ~ltkIdP)
+                                 >)
+  )
+  ]->
+   [
+   Out( https_response(~client_ID_TLS_SP_IdP,
+                       <
+                        <'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                         <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                          ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                          <'Audience', $SP>, ~assertion_secret>, 
+                         sign(<'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                               ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                               <'Audience', $SP>, ~assertion_secret>,
+                              ~ltkIdP)
+                        >, 
+                        sign(<'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                              <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                               ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                               <'Audience', $SP>, ~assertion_secret>, 
+                              sign(<'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                    ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                    <'Audience', $SP>, ~assertion_secret>,
+                                   ~ltkIdP)
+                             >,
+                             ~ltkIdP)
+                       >)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Resource_Request[color=#add8e6]:
+   [
+   !Client_Initialized( $C ), !Is_Resource( $url, $SP1 ),
+   Fr( ~client_session_id ),
+   New_Client_TLS_Session( $C, $SP, ~tls_session_id_C_SP )
+   ]
+  --[
+  Start_Client( $C ),
+  Client_Resource_Request( $C, $SP, ~client_session_id, $url ),
+  Https_Request( https_request($SP, ~tls_session_id_C_SP,
+                               <'ResourceRequest', $url>)
+  )
+  ]->
+   [
+   Client_State_1( $C, $SP, ~client_session_id, ~tls_session_id_C_SP ),
+   Out( https_request($SP, ~tls_session_id_C_SP, <'ResourceRequest', $url>)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_AuthnRequest_Redirect[color=#add8e6]:
+   [
+   Client_State_1( $C, $SP, ~client_session_id, ~tls_session_id_C_SP ),
+   !Ltk( $SP1, ~ltkSP1 ),
+   In( https_response(~tls_session_id_C_SP,
+                      <$IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP1, $IdP1>, 'Signature'
+                      >)
+   ),
+   New_Client_TLS_Session( $C, $IdP, ~tls_session_id_C_IdP )
+   ]
+  --[
+  Https_Request( https_request($IdP, ~tls_session_id_C_IdP,
+                               <$IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP1, $IdP1>, 'Signature'
+                               >)
+  )
+  ]->
+   [
+   Client_State_2( $C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_IdP
+   ),
+   Out( https_request($IdP, ~tls_session_id_C_IdP,
+                      <$IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP1, $IdP1>, 'Signature'
+                      >)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Authentication_at_IdP[color=#add8e6]:
+   [
+   Client_State_2( $C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_IdP
+   ),
+   !ClientID( $C, ~clientID ),
+   !Client_Registered_at_IdP( $IdP, ~clientID, ~clientSecret ),
+   In( https_response(~tls_session_id_C_IdP,
+                      <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+   ),
+   New_Client_TLS_Session( $C, $IdP, ~tls_session_id_C_IdP_1 )
+   ]
+  --[
+  Https_Request( https_request($IdP, ~tls_session_id_C_IdP_1,
+                               <'IAuthAndConsent', ~clientID, $SP, $IdP, ~clientSecret, ~auth_session>)
+  )
+  ]->
+   [
+   Client_State_3( $C, $SP, $IdP, ~client_session_id,
+                   ~tls_session_id_C_IdP_1
+   ),
+   Out( https_request($IdP, ~tls_session_id_C_IdP_1,
+                      <'IAuthAndConsent', ~clientID, $SP, $IdP, ~clientSecret, ~auth_session>)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Artifact_Redirect[color=#add8e6]:
+   [
+   Client_State_3( $C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_IdP
+   ),
+   In( https_response(~tls_session_id_C_IdP,
+                      <<'Artifact', $Agent, ~messageHandle>, ~rs>)
+   ),
+   New_Client_TLS_Session( $C, $SP, ~tls_session_id_C_SP )
+   ]
+  --[
+  Client_Artifact_Redirect( $C, $SP, $IdP, ~client_session_id, $Agent ),
+  Https_Request( https_request($SP, ~tls_session_id_C_SP,
+                               <<'Artifact', $Agent, ~messageHandle>, ~rs>)
+  )
+  ]->
+   [
+   Client_State_4( $C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_SP
+   ),
+   Out( https_request($SP, ~tls_session_id_C_SP,
+                      <<'Artifact', $Agent, ~messageHandle>, ~rs>)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Receive_Resource[color=#add8e6]:
+   [
+   Client_State_4( $C, $SP, $IdP, ~client_session_id, ~tls_session_id_C_SP
+   ),
+   In( https_response(~tls_session_id_C_SP, <~res, $url, ~ts_res>) ),
+   !ClientID( $C, ~clientID )
+   ]
+  --[
+  ClientFinish( $C, $SP, $IdP ),
+  Client_Params( $C, $SP, $IdP, ~clientID, ~client_session_id,
+                 <~res, $url, ~ts_res>
+  )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+restriction Agent_Initializes_Once:
+  "∀ A #i #j.
+    ((Initialize_Agent( A ) @ #i) ∧ (Initialize_Agent( A ) @ #j)) ⇒
+    (#i = #j)"
+  // safety formula
+
+restriction No_Corrupt_to_Corrupt_TLS:
+  "∀ C S id #i #j #k.
+    (((Client_Starts_TLS( C, S, id ) @ #i) ∧ (Compromise_Agent( C ) @ #j)) ∧
+     (Compromise_Agent( S ) @ #k)) ⇒
+    (⊥)"
+  // safety formula
+
+restriction One_Client:
+  "∀ A B #i #j.
+    ((Initialize_Client( A ) @ #i) ∧ (Initialize_Client( B ) @ #j)) ⇒
+    ((A = B) ∧ (#i = #j))"
+  // safety formula
+
+restriction One_SP:
+  "∀ A B #i #j.
+    ((Initialize_SP( A ) @ #i) ∧ (Initialize_SP( B ) @ #j)) ⇒
+    ((A = B) ∧ (#i = #j))"
+  // safety formula
+
+restriction One_IdP:
+  "∀ A B #i #j.
+    ((Initialize_IdP( A ) @ #i) ∧ (Initialize_IdP( B ) @ #j)) ⇒
+    ((A = B) ∧ (#i = #j))"
+  // safety formula
+
+restriction One_Client_Session:
+  "∀ A #i #j.
+    ((Start_Client( A ) @ #i) ∧ (Start_Client( A ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+restriction One_SP_Session:
+  "∀ A #i #j. ((Start_SP( A ) @ #i) ∧ (Start_SP( A ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+restriction One_IdP_Session:
+  "∀ A #i #j. ((Start_IdP( A ) @ #i) ∧ (Start_IdP( A ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+lemma https_typing [sources]:
+  all-traces
+  "(∀ m #i.
+     (Adversary_Receives_as_Client( m ) @ #i) ⇒
+     (∃ #j. (Https_Response( m ) @ #j) ∧ (#j < #i))) ∧
+   (∀ m #i.
+     (Adversary_Receives_as_Server( m ) @ #i) ⇒
+     (∃ #j. (Https_Request( m ) @ #j) ∧ (#j < #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"((∃ m #i.
+    (Adversary_Receives_as_Client( m ) @ #i)
+   ∧
+    ∀ #j. (Https_Response( m ) @ #j) ⇒ ¬(#j < #i)) ∨
+  (∃ m #i.
+    (Adversary_Receives_as_Server( m ) @ #i)
+   ∧
+    ∀ #j. (Https_Request( m ) @ #j) ⇒ ¬(#j < #i)))"
+*/
+by sorry
+
+lemma helper_Either_Honest_or_Compromised_Client [reuse]:
+  all-traces
+  "∀ A #i #j.
+    ((Compromise_Agent( A ) @ #i) ∧ (Initialize_Client( A ) @ #j)) ⇒ (⊥)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A #i #j. (Compromise_Agent( A ) @ #i) ∧ (Initialize_Client( A ) @ #j)"
+*/
+by sorry
+
+lemma helper_Either_Honest_or_Compromised_SP [reuse]:
+  all-traces
+  "∀ A #i #j.
+    ((Compromise_Agent( A ) @ #i) ∧ (Initialize_SP( A ) @ #j)) ⇒ (⊥)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A #i #j. (Compromise_Agent( A ) @ #i) ∧ (Initialize_SP( A ) @ #j)"
+*/
+by sorry
+
+lemma helper_Either_Honest_or_Compromised_IdP [reuse]:
+  all-traces
+  "∀ A #i #j.
+    ((Compromise_Agent( A ) @ #i) ∧ (Initialize_IdP( A ) @ #j)) ⇒ (⊥)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A #i #j. (Compromise_Agent( A ) @ #i) ∧ (Initialize_IdP( A ) @ #j)"
+*/
+by sorry
+
+lemma helper_tls_Sends_as_Server_Only_if_Compromised [reuse]:
+  all-traces
+  "∀ A id m #i.
+    (Adversary_Sends_as_Server( A, id, m ) @ #i) ⇒
+    (∃ #j. Compromise_Agent( A ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A id m #i.
+  (Adversary_Sends_as_Server( A, id, m ) @ #i)
+ ∧
+  ∀ #j. (Compromise_Agent( A ) @ #j) ⇒ ⊥"
+*/
+by sorry
+
+lemma helper_tls_Cannot_Send_As_Honest_Server_2 [reuse]:
+  all-traces
+  "∀ A C S id m #i #j.
+    ((Adversary_Sends_as_Server( A, id, m ) @ #i) ∧
+     (Client_Starts_TLS( C, S, id ) @ #j)) ⇒
+    (∃ #k. Compromise_Agent( S ) @ #k)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A C S id m #i #j.
+  (Adversary_Sends_as_Server( A, id, m ) @ #i) ∧
+  (Client_Starts_TLS( C, S, id ) @ #j)
+ ∧
+  ∀ #k. (Compromise_Agent( S ) @ #k) ⇒ ⊥"
+*/
+by sorry
+
+lemma helper_tls_Session_Id_Secrecy [reuse]:
+  all-traces
+  "∀ C S id #i.
+    (Client_Starts_TLS( C, S, id ) @ #i) ⇒ (¬(∃ #j. !KU( id ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S id #i.
+  (Client_Starts_TLS( C, S, id ) @ #i) ∧ ∃ #j. (!KU( id ) @ #j)"
+*/
+by sorry
+
+lemma helper_Long_Term_Key_Secrecy [reuse]:
+  all-traces
+  "∀ A ltk #i #k.
+    ((Agent_Key( A, ltk ) @ #i) ∧ (!KU( ltk ) @ #k)) ⇒
+    (∃ #j. Compromise_Agent( A ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A ltk #i #k.
+  (Agent_Key( A, ltk ) @ #i) ∧ (!KU( ltk ) @ #k)
+ ∧
+  ∀ #j. (Compromise_Agent( A ) @ #j) ⇒ ⊥"
+*/
+by sorry
+
+lemma helper_Client_Secret_Secrecy [reuse]:
+  all-traces
+  "∀ C I id s #i #k.
+    ((Register_Client_at_IdP( C, I, id, s ) @ #i) ∧ (!KU( s ) @ #k)) ⇒ (⊥)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C I id s #i #k.
+  (Register_Client_at_IdP( C, I, id, s ) @ #i) ∧ (!KU( s ) @ #k)"
+*/
+by sorry
+
+lemma executable:
+  exists-trace "∃ C S I #i. ClientFinish( C, S, I ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i. (ClientFinish( C, S, I ) @ #i)"
+*/
+simplify
+solve( !ClientID( $C, ~clientID ) ▶₂ #i )
+  case Initialize_Agent
+  solve( Client_State_4( $C, $SP, $IdP, ~client_session_id,
+                         ~tls_session_id_C_SP
+         ) ▶₀ #i )
+    case Client_Artifact_Redirect_case_1
+    solve( !KU( https_response(~tls_session_id_C_SP, <~res, $url, ~ts_res>)
+           ) @ #vk.2 )
+      case Adversary_Sends_as_Server
+      solve( Agent_Initialized( $SP ) ▶₀ #k )
+        case Initialize_Agent
+        solve( Agent_Initialized( $SP ) ▶₀ #k.1 )
+          case Initialize_Agent
+          solve( Agent_Initialized( $SP ) ▶₀ #j )
+            case Initialize_Agent
+            solve( !KU( https_response(~tls_session_id_C_IdP.1,
+                                       <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+                   ) @ #vk.3 )
+              case IdP_Receive_Authentication_Request
+              solve( Agent_Initialized( $SP ) ▶₀ #k )
+                case Initialize_Agent
+                solve( Agent_Initialized( $SP ) ▶₀ #j.1 )
+                  case Initialize_Agent
+                  solve( !KU( ~res ) @ #vk.7 )
+                    case Adversary_Receives_as_Client_case_01
+                    solve( !KU( ~rs ) @ #vk.20 )
+                      case Adversary_Receives_as_Client_case_01
+                      solve( !KU( ~id_authnrequest ) @ #vk.21 )
+                        case Adversary_Receives_as_Client_case_01
+                        solve( !KU( ~ts_res ) @ #vk.15 )
+                          case Adversary_Receives_as_Client_case_01
+                          SOLVED // trace found
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_honest_all:
+  exists-trace
+  "∃ C S I #i #j #k #l.
+    (((ClientFinish( C, S, I ) @ #i) ∧ (Initialize_Client( C ) @ #j)) ∧
+     (Initialize_SP( S ) @ #k)) ∧
+    (Initialize_IdP( I ) @ #l)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i #j #k #l.
+  (ClientFinish( C, S, I ) @ #i) ∧
+  (Initialize_Client( C ) @ #j) ∧
+  (Initialize_SP( S ) @ #k) ∧
+  (Initialize_IdP( I ) @ #l)"
+*/
+simplify
+solve( !ClientID( $C, ~clientID ) ▶₂ #i )
+  case Initialize_Agent
+  solve( Agent_Initialized( $C ) ▶₀ #j )
+    case Initialize_Agent
+    solve( Agent_Initialized( $SP ) ▶₀ #k )
+      case Initialize_Agent
+      solve( Agent_Initialized( $IdP ) ▶₀ #l )
+        case Initialize_Agent
+        solve( Client_State_4( $C, $SP, $IdP, ~client_session_id,
+                               ~tls_session_id_C_SP
+               ) ▶₀ #i )
+          case Client_Artifact_Redirect_case_1
+          solve( !KU( https_response(~tls_session_id_C_SP, <~res, $url, ~ts_res>)
+                 ) @ #vk.2 )
+            case SP_Artifact_Resolution_case_1
+            solve( !KU( https_response(~tls_session_id_C_IdP.1,
+                                       <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+                   ) @ #vk.5 )
+              case IdP_Receive_Authentication_Request
+              solve( !KU( https_request($SP, ~tls_session_id_C_SP.1,
+                                        <'ResourceRequest', $url>)
+                     ) @ #vk.8 )
+                case Client_Resource_Request
+                solve( !KU( https_request($IdP, ~client_ID_TLS_SP_IdP,
+                                          <
+                                           <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                                            ~messageHandle>, 
+                                           sign(<'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', 
+                                                 $IdP, ~messageHandle>,
+                                                ~ltkSP1)
+                                          >)
+                       ) @ #vk.9 )
+                  case SP_Resource_Request_With_Artifact
+                  SOLVED // trace found
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_honest_c_corrupt_s:
+  exists-trace
+  "∃ C S I #i #j #k.
+    ((ClientFinish( C, S, I ) @ #i) ∧ (Compromise_Agent( S ) @ #j)) ∧
+    (Initialize_IdP( I ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i #j #k.
+  (ClientFinish( C, S, I ) @ #i) ∧
+  (Compromise_Agent( S ) @ #j) ∧
+  (Initialize_IdP( I ) @ #k)"
+*/
+simplify
+solve( !ClientID( $C, ~clientID ) ▶₂ #i )
+  case Initialize_Agent
+  solve( Agent_Initialized( $SP ) ▶₀ #j )
+    case Initialize_Agent
+    solve( !Ltk( $SP, ~ltk ) ▶₁ #j )
+      case Initialize_Agent
+      solve( Agent_Initialized( $IdP ) ▶₀ #k )
+        case Initialize_Agent
+        solve( Client_State_4( $C, $SP, $IdP, ~client_session_id,
+                               ~tls_session_id_C_SP
+               ) ▶₀ #i )
+          case Client_Artifact_Redirect_case_1
+          solve( !KU( https_response(~tls_session_id_C_SP, <~res, $url, ~ts_res>)
+                 ) @ #vk.2 )
+            case Adversary_Sends_as_Server
+            solve( Agent_Initialized( $SP ) ▶₀ #k.1 )
+              case Initialize_Agent
+              solve( Agent_Initialized( $SP ) ▶₀ #k.1 )
+                case Initialize_Agent
+                solve( Agent_Initialized( $SP ) ▶₀ #j.1 )
+                  case Initialize_Agent
+                  solve( !KU( https_response(~tls_session_id_C_IdP.1,
+                                             <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+                         ) @ #vk.3 )
+                    case IdP_Receive_Authentication_Request
+                    solve( Agent_Initialized( $SP ) ▶₀ #k.1 )
+                      case Initialize_Agent
+                      solve( Agent_Initialized( $SP ) ▶₀ #j.1 )
+                        case Initialize_Agent
+                        solve( !KU( ~res ) @ #vk.7 )
+                          case Adversary_Receives_as_Client_case_01
+                          solve( !KU( ~rs ) @ #vk.20 )
+                            case Adversary_Receives_as_Client_case_01
+                            solve( !KU( ~id_authnrequest ) @ #vk.21 )
+                              case Adversary_Receives_as_Client_case_01
+                              solve( !KU( ~ts_res ) @ #vk.15 )
+                                case Adversary_Receives_as_Client_case_01
+                                SOLVED // trace found
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_honest_c_corrupt_i:
+  exists-trace
+  "∃ C S I #i #j #k.
+    ((ClientFinish( C, S, I ) @ #i) ∧ (Compromise_Agent( I ) @ #j)) ∧
+    (Initialize_SP( S ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i #j #k.
+  (ClientFinish( C, S, I ) @ #i) ∧
+  (Compromise_Agent( I ) @ #j) ∧
+  (Initialize_SP( S ) @ #k)"
+*/
+simplify
+solve( !ClientID( $C, ~clientID ) ▶₂ #i )
+  case Initialize_Agent
+  solve( Agent_Initialized( $IdP ) ▶₀ #j )
+    case Initialize_Agent
+    solve( !Ltk( $IdP, ~ltk ) ▶₁ #j )
+      case Initialize_Agent
+      solve( Agent_Initialized( $SP ) ▶₀ #k )
+        case Initialize_Agent
+        solve( Client_State_4( $C, $SP, $IdP, ~client_session_id,
+                               ~tls_session_id_C_SP
+               ) ▶₀ #i )
+          case Client_Artifact_Redirect_case_1
+          solve( Agent_Initialized( $IdP ) ▶₀ #k.1 )
+            case Initialize_Agent
+            solve( Agent_Initialized( $IdP ) ▶₀ #j.1 )
+              case Initialize_Agent
+              solve( !KU( https_response(~tls_session_id_C_SP, <~res, $url, ~ts_res>)
+                     ) @ #vk.1 )
+                case SP_Artifact_Resolution_case_01
+                solve( Agent_Initialized( $Agent ) ▶₀ #k.1 )
+                  case Initialize_Agent
+                  solve( Agent_Initialized( $Agent ) ▶₀ #j.1 )
+                    case Initialize_Agent
+                    solve( !KU( https_response(~tls_session_id_C_IdP.1,
+                                               <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+                           ) @ #vk.4 )
+                      case Adversary_Sends_as_Server
+                      solve( Agent_Initialized( $IdP ) ▶₀ #k.1 )
+                        case Initialize_Agent
+                        solve( Agent_Initialized( $IdP ) ▶₀ #j.2 )
+                          case Initialize_Agent
+                          solve( !KU( https_response(~tls_session_id_C_SP.1,
+                                                     <$IdP, ~rs.1, 
+                                                      <'AuthnRequest', ~id_authnrequest.1, $SP1, $IdP1>, 
+                                                      'Signature'>)
+                                 ) @ #vk.5 )
+                            case SP_Resource_Request
+                            solve( !KU( sign(<'ArtifactResponse', $Agent, ~id_artifactresolve, 
+                                              <'Response', ~id_response, $Agent, ~id_authnrequest, 
+                                               'Assertion', ~id_assertion, $Agent, 
+                                               <'Subject', ~clientID, ~id_authnrequest>, <'Audience', $SP>, 
+                                               ~assertion_secret>, 
+                                              ResponseSignature>,
+                                             ~ltk)
+                                   ) @ #vk.47 )
+                              case c_sign
+                              solve( !KU( ~assertion_secret ) @ #vk.46 )
+                                case Adversary_Receives_as_Client_case_01
+                                solve( !KU( ~messageHandle ) @ #vk.31 )
+                                  case Adversary_Receives_as_Client_case_01
+                                  solve( !KU( ~rs ) @ #vk.32 )
+                                    case Adversary_Receives_as_Server
+                                    solve( !KU( ~rs.1 ) @ #vk.60 )
+                                      case Adversary_Receives_as_Server_case_2
+                                      solve( !KU( ~clientID ) @ #vk.46 )
+                                        case Adversary_Receives_as_Server
+                                        solve( Agent_Initialized( $Agent ) ▶₀ #k.1 )
+                                          case Initialize_Agent
+                                          solve( Agent_Initialized( $Agent ) ▶₀ #j.1 )
+                                            case Initialize_Agent
+                                            solve( !KU( ~id_artifactresolve ) @ #vk.42 )
+                                              case Adversary_Receives_as_Server
+                                              solve( !KU( ~id_response ) @ #vk.45 )
+                                                case Adversary_Receives_as_Client_case_01
+                                                solve( !KU( ~id_authnrequest ) @ #vk.45 )
+                                                  case Adversary_Receives_as_Server
+                                                  solve( !KU( ~id_assertion ) @ #vk.47 )
+                                                    case Adversary_Receives_as_Client_case_01
+                                                    solve( !KU( ~id_authnrequest.1 ) @ #vk.61 )
+                                                      case Adversary_Receives_as_Server_case_2
+                                                      solve( !KU( ~ltk ) @ #vk.55 )
+                                                        case Compromise_Agent
+                                                        solve( Agent_Initialized( $Agent ) ▶₀ #j.1 )
+                                                          case Initialize_Agent
+                                                          solve( !KU( ~auth_session ) @ #vk.57 )
+                                                            case Adversary_Receives_as_Client_case_01
+                                                            SOLVED // trace found
+                                                          qed
+                                                        qed
+                                                      qed
+                                                    qed
+                                                  qed
+                                                qed
+                                              qed
+                                            qed
+                                          qed
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_honest_c_corrupt_i_s:
+  exists-trace
+  "∃ C S I #i #j #k.
+    ((ClientFinish( C, S, I ) @ #i) ∧ (Compromise_Agent( I ) @ #j)) ∧
+    (Compromise_Agent( S ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i #j #k.
+  (ClientFinish( C, S, I ) @ #i) ∧
+  (Compromise_Agent( I ) @ #j) ∧
+  (Compromise_Agent( S ) @ #k)"
+*/
+simplify
+solve( !ClientID( $C, ~clientID ) ▶₂ #i )
+  case Initialize_Agent
+  solve( Agent_Initialized( $IdP ) ▶₀ #j )
+    case Initialize_Agent
+    solve( !Ltk( $IdP, ~ltk ) ▶₁ #j )
+      case Initialize_Agent
+      solve( Agent_Initialized( $SP ) ▶₀ #k )
+        case Initialize_Agent
+        solve( !Ltk( $SP, ~ltk.1 ) ▶₁ #k )
+          case Initialize_Agent
+          solve( Client_State_4( $C, $SP, $IdP, ~client_session_id,
+                                 ~tls_session_id_C_SP
+                 ) ▶₀ #i )
+            case Client_Artifact_Redirect_case_1
+            solve( Agent_Initialized( $IdP ) ▶₀ #k.1 )
+              case Initialize_Agent
+              solve( Agent_Initialized( $IdP ) ▶₀ #j.1 )
+                case Initialize_Agent
+                solve( !KU( https_response(~tls_session_id_C_SP, <~res, $url, ~ts_res>)
+                       ) @ #vk.1 )
+                  case Adversary_Sends_as_Server
+                  solve( Agent_Initialized( $SP ) ▶₀ #k.1 )
+                    case Initialize_Agent
+                    solve( Agent_Initialized( $SP ) ▶₀ #k.1 )
+                      case Initialize_Agent
+                      solve( Agent_Initialized( $SP ) ▶₀ #j.1 )
+                        case Initialize_Agent
+                        solve( !KU( https_response(~tls_session_id_C_IdP.1,
+                                                   <'PlsAuthAndConsent', $SP, $IdP, ~auth_session>)
+                               ) @ #vk.2 )
+                          case Adversary_Sends_as_Server
+                          solve( Agent_Initialized( $IdP ) ▶₀ #k.1 )
+                            case Initialize_Agent
+                            solve( Agent_Initialized( $IdP ) ▶₀ #j.1 )
+                              case Initialize_Agent
+                              solve( !KU( https_response(~tls_session_id_C_SP.1,
+                                                         <$IdP, ~rs.1, 
+                                                          <'AuthnRequest', ~id_authnrequest, $SP1, $IdP1>, 
+                                                          'Signature'>)
+                                     ) @ #vk.3 )
+                                case Adversary_Sends_as_Server
+                                solve( Agent_Initialized( $SP ) ▶₀ #k.1 )
+                                  case Initialize_Agent
+                                  solve( Agent_Initialized( $SP ) ▶₀ #j.1 )
+                                    case Initialize_Agent
+                                    solve( !KU( ~res ) @ #vk.12 )
+                                      case Adversary_Receives_as_Client_case_01
+                                      solve( !KU( ~messageHandle ) @ #vk.12 )
+                                        case Adversary_Receives_as_Client_case_01
+                                        solve( !KU( ~rs ) @ #vk.13 )
+                                          case Adversary_Receives_as_Client_case_01
+                                          solve( !KU( ~rs ) @ #vk.25 )
+                                            case Adversary_Receives_as_Client_case_01
+                                            solve( !KU( ~id_authnrequest ) @ #vk.29 )
+                                              case Adversary_Receives_as_Client_case_01
+                                              solve( !KU( ~ts_res ) @ #vk.18 )
+                                                case Adversary_Receives_as_Client_case_01
+                                                solve( !KU( ~auth_session ) @ #vk.25 )
+                                                  case Adversary_Receives_as_Client_case_01
+                                                  SOLVED // trace found
+                                                qed
+                                              qed
+                                            qed
+                                          qed
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_honest_s_corrupt_c:
+  exists-trace
+  "∃ C S I #i #j #k.
+    ((SPFinish( S, C, I ) @ #i) ∧ (Compromise_Agent( C ) @ #j)) ∧
+    (Initialize_IdP( I ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i #j #k.
+  (SPFinish( S, C, I ) @ #i) ∧
+  (Compromise_Agent( C ) @ #j) ∧
+  (Initialize_IdP( I ) @ #k)"
+*/
+simplify
+solve( !Ltk( $IdP, ~ltkIdP ) ▶₁ #i )
+  case Initialize_Agent
+  solve( Agent_Initialized( $C ) ▶₀ #j )
+    case Initialize_Agent
+    solve( !Ltk( $C, ~ltk ) ▶₁ #j )
+      case Initialize_Agent
+      solve( Agent_Initialized( $IdP ) ▶₀ #k )
+        case Initialize_Agent
+        solve( SP_State_2( $SP, $IdP,
+                           <'AuthnRequest', ~id_authnrequest, $SP, $IdP>, $url,
+                           <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                            ~messageHandle>,
+                           ~client_ID_TLS_C_SP, ~client_ID_TLS_SP_IdP
+               ) ▶₀ #i )
+          case SP_Resource_Request_With_Artifact_case_01
+          solve( !KU( https_response(~client_ID_TLS_SP_IdP,
+                                     <
+                                      <'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                                       <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                        ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                        <'Audience', $SP>, ~assertion_secret>, 
+                                       ResponseSignature>, 
+                                      sign(<'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                                            <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                             ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                             <'Audience', $SP>, ~assertion_secret>, 
+                                            ResponseSignature>,
+                                           ~ltkIdP)
+                                     >)
+                 ) @ #vk.1 )
+            case IdP_Artifact_Resolution_case_2
+            solve( !KU( https_request($SP, ~tls_session_id_C_SP,
+                                      <'ResourceRequest', $url>)
+                   ) @ #vk.3 )
+              case Adversary_Sends_as_Client
+              solve( !KU( https_request($IdP, ~client_ID_TLS_C_IdP,
+                                        <'IAuthAndConsent', ~clientID, $SP, $IdP, ~clientSecret.1, 
+                                         ~auth_session>)
+                     ) @ #vk.11 )
+                case Adversary_Sends_as_Client
+                solve( !KU( https_request($IdP, ~tls_session_id_C_IdP,
+                                          <$IdP, ~rs.1, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>, 
+                                           'Signature'>)
+                       ) @ #vk.13 )
+                  case Adversary_Sends_as_Client
+                  solve( !Client_Has_Resource( $SP, ~clientID, $url, ~res ) ▶₂ #i )
+                    case Adversary_Register_Resource_at_SP
+                    solve( !KU( ~clientSecret ) @ #vk.27 )
+                      case Adversary_Register_Client_at_IdP
+                      solve( !KU( ~messageHandle ) @ #vk.20 )
+                        case Adversary_Receives_as_Client_case_1
+                        solve( !KU( ~rs ) @ #vk.24 )
+                          case Adversary_Receives_as_Client_case_1
+                          solve( !KU( ~rs.1 ) @ #vk.34 )
+                            case Adversary_Receives_as_Client_case_1
+                            solve( !KU( ~clientID ) @ #vk.31 )
+                              case Initialize_Agent
+                              solve( !KU( ~id_authnrequest ) @ #vk.35 )
+                                case Adversary_Receives_as_Client
+                                solve( !KU( ~auth_session ) @ #vk.34 )
+                                  case Adversary_Receives_as_Client
+                                  SOLVED // trace found
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_honest_s_corrupt_c_i:
+  exists-trace
+  "∃ C S I #i #j #k.
+    ((SPFinish( S, C, I ) @ #i) ∧ (Compromise_Agent( C ) @ #j)) ∧
+    (Compromise_Agent( I ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i #j #k.
+  (SPFinish( S, C, I ) @ #i) ∧
+  (Compromise_Agent( C ) @ #j) ∧
+  (Compromise_Agent( I ) @ #k)"
+*/
+simplify
+solve( !Ltk( $IdP, ~ltkIdP ) ▶₁ #i )
+  case Initialize_Agent
+  solve( Agent_Initialized( $C ) ▶₀ #j )
+    case Initialize_Agent
+    solve( !Ltk( $C, ~ltk ) ▶₁ #j )
+      case Initialize_Agent
+      solve( Agent_Initialized( $IdP ) ▶₀ #k )
+        case Initialize_Agent
+        solve( !Ltk( $IdP, ~ltk.1 ) ▶₁ #k )
+          case Initialize_Agent
+          solve( SP_State_2( $SP, $IdP,
+                             <'AuthnRequest', ~id_authnrequest, $SP, $IdP>, $url,
+                             <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                              ~messageHandle>,
+                             ~client_ID_TLS_C_SP, ~client_ID_TLS_SP_IdP
+                 ) ▶₀ #i )
+            case SP_Resource_Request_With_Artifact_case_01
+            solve( !KU( https_response(~client_ID_TLS_SP_IdP,
+                                       <
+                                        <'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                                         <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                          ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                          <'Audience', $SP>, ~assertion_secret>, 
+                                         ResponseSignature>, 
+                                        sign(<'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                                              <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                               ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                               <'Audience', $SP>, ~assertion_secret>, 
+                                              ResponseSignature>,
+                                             ~ltkIdP)
+                                       >)
+                   ) @ #vk.1 )
+              case Adversary_Sends_as_Server
+              solve( Agent_Initialized( $IdP ) ▶₀ #k.1 )
+                case Initialize_Agent
+                solve( Agent_Initialized( $IdP ) ▶₀ #k.1 )
+                  case Initialize_Agent
+                  solve( Agent_Initialized( $IdP ) ▶₀ #j.1 )
+                    case Initialize_Agent
+                    solve( !KU( https_request($SP, ~tls_session_id_C_SP,
+                                              <'ResourceRequest', $url>)
+                           ) @ #vk.2 )
+                      case Adversary_Sends_as_Client
+                      solve( !KU( sign(<'ArtifactResponse', $IdP, ~id_artifactresolve, 
+                                        <'Response', ~id_response, $IdP, ~id_authnrequest, 'Assertion', 
+                                         ~id_assertion, $IdP, <'Subject', ~clientID, ~id_authnrequest>, 
+                                         <'Audience', $SP>, ~assertion_secret>, 
+                                        ResponseSignature>,
+                                       ~ltkIdP)
+                             ) @ #vk.40 )
+                        case c_sign
+                        solve( !Client_Has_Resource( $SP, ~clientID, $url, ~res ) ▶₂ #i )
+                          case Adversary_Register_Resource_at_SP
+                          solve( !KU( ~assertion_secret ) @ #vk.39 )
+                            case Adversary_Receives_as_Client_case_01
+                            solve( !KU( ~messageHandle ) @ #vk.23 )
+                              case Adversary_Receives_as_Client_case_01
+                              solve( !KU( ~clientID ) @ #vk.35 )
+                                case Initialize_Agent
+                                solve( !KU( ~id_artifactresolve ) @ #vk.27 )
+                                  case Adversary_Receives_as_Server_case_1
+                                  solve( !KU( ~id_response ) @ #vk.31 )
+                                    case Adversary_Receives_as_Client_case_01
+                                    solve( !KU( ~id_authnrequest ) @ #vk.32 )
+                                      case Adversary_Receives_as_Client_case_1
+                                      solve( !KU( ~id_assertion ) @ #vk.34 )
+                                        case Adversary_Receives_as_Client_case_01
+                                        solve( !KU( ~ltkIdP ) @ #vk.42 )
+                                          case Compromise_Agent
+                                          solve( Agent_Initialized( $IdP ) ▶₀ #j.1 )
+                                            case Initialize_Agent
+                                            SOLVED // trace found
+                                          qed
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_honest_i_corrupt_c:
+  exists-trace
+  "∃ C S I #i #j #k.
+    ((IDPFinish( C, S, I ) @ #i) ∧ (Compromise_Agent( C ) @ #j)) ∧
+    (Initialize_SP( S ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i #j #k.
+  (IDPFinish( C, S, I ) @ #i) ∧
+  (Compromise_Agent( C ) @ #j) ∧
+  (Initialize_SP( S ) @ #k)"
+*/
+simplify
+solve( !Ltk( $SP, ~ltkSP ) ▶₁ #i )
+  case Initialize_Agent
+  solve( !Ltk( $IdP, ~ltkIdP ) ▶₂ #i )
+    case Initialize_Agent
+    solve( Agent_Initialized( $C ) ▶₀ #j )
+      case Initialize_Agent
+      solve( !Ltk( $C, ~ltk ) ▶₁ #j )
+        case Initialize_Agent
+        solve( Agent_Initialized( $SP ) ▶₀ #k )
+          case Initialize_Agent
+          solve( IdP_State_2( $IdP, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+                              <'Artifact', $IdP, ~messageHandle>, ~clientID
+                 ) ▶₀ #i )
+            case IdP_Client_Authentication_case_2
+            solve( !KU( https_request($IdP, ~client_ID_TLS_SP_IdP,
+                                      <
+                                       <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                                        ~messageHandle>, 
+                                       sign(<'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                                             ~messageHandle>,
+                                            ~ltkSP)
+                                      >)
+                   ) @ #vk.2 )
+              case SP_Resource_Request_With_Artifact_case_2
+              solve( !KU( https_request($IdP, ~tls_session_id_C_IdP,
+                                        <$IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>, 'Signature'
+                                        >)
+                     ) @ #vk.5 )
+                case Client_AuthnRequest_Redirect
+                solve( !Client_Registered_at_IdP( $IdP, ~clientID, ~clientSecret
+                       ) ▶₃ #i )
+                  case Register_Client_at_IdP
+                  solve( New_Server_TLS_Session( $IdP, ~client_ID_TLS_SP_IdP ) ▶₄ #i )
+                    case Client_Starts_TLS
+                    solve( New_Id( ~id_assertion ) ▶₇ #i )
+                      case Generate_New_Id
+                      solve( New_Id( ~id_response ) ▶₈ #i )
+                        case Generate_New_Id
+                        SOLVED // trace found
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_honest_i_corrupt_s:
+  exists-trace
+  "∃ C S I #i #j #k.
+    ((IDPFinish( C, S, I ) @ #i) ∧ (Compromise_Agent( S ) @ #j)) ∧
+    (Initialize_Client( C ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i #j #k.
+  (IDPFinish( C, S, I ) @ #i) ∧
+  (Compromise_Agent( S ) @ #j) ∧
+  (Initialize_Client( C ) @ #k)"
+*/
+simplify
+solve( !Ltk( $SP, ~ltkSP ) ▶₁ #i )
+  case Initialize_Agent
+  solve( !Ltk( $IdP, ~ltkIdP ) ▶₂ #i )
+    case Initialize_Agent
+    solve( Agent_Initialized( $SP ) ▶₀ #j )
+      case Initialize_Agent
+      solve( !Ltk( $SP, ~ltk ) ▶₁ #j )
+        case Initialize_Agent
+        solve( Agent_Initialized( $C ) ▶₀ #k )
+          case Initialize_Agent
+          solve( IdP_State_2( $IdP, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+                              <'Artifact', $IdP, ~messageHandle>, ~clientID
+                 ) ▶₀ #i )
+            case IdP_Client_Authentication_case_2
+            solve( !KU( https_request($IdP, ~client_ID_TLS_SP_IdP,
+                                      <
+                                       <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                                        ~messageHandle>, 
+                                       sign(<'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                                             ~messageHandle>,
+                                            ~ltk)
+                                      >)
+                   ) @ #vk.2 )
+              case Adversary_Sends_as_Client
+              solve( !KU( https_request($IdP, ~tls_session_id_C_IdP,
+                                        <$IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>, 'Signature'
+                                        >)
+                     ) @ #vk.3 )
+                case Client_AuthnRequest_Redirect
+                solve( Agent_Initialized( $SP ) ▶₀ #k.1 )
+                  case Initialize_Agent
+                  solve( Agent_Initialized( $SP ) ▶₀ #j.1 )
+                    case Initialize_Agent
+                    solve( !KU( sign(<'ArtifactResolve', ~id_artifactresolve, $SP, 
+                                      'Artifact', $IdP, ~messageHandle>,
+                                     ~ltk)
+                           ) @ #vk.21 )
+                      case c_sign
+                      solve( !Client_Registered_at_IdP( $IdP, ~clientID, ~clientSecret
+                             ) ▶₃ #i )
+                        case Register_Client_at_IdP
+                        solve( !KU( ~messageHandle ) @ #vk.23 )
+                          case Adversary_Receives_as_Server_case_5
+                          solve( !KU( ~rs ) @ #vk.26 )
+                            case Adversary_Receives_as_Client_case_01
+                            solve( New_Server_TLS_Session( $IdP, ~client_ID_TLS_SP_IdP ) ▶₄ #i )
+                              case Client_Starts_TLS
+                              solve( !KU( ~id_artifactresolve ) @ #vk.19 )
+                                case Adversary_Receives_as_Client_case_01
+                                solve( !KU( ~id_authnrequest ) @ #vk.29 )
+                                  case Adversary_Receives_as_Client_case_01
+                                  solve( !KU( ~ltk ) @ #vk.30 )
+                                    case Compromise_Agent
+                                    solve( Agent_Initialized( $SP ) ▶₀ #j.1 )
+                                      case Initialize_Agent
+                                      solve( New_Id( ~id_assertion ) ▶₇ #i )
+                                        case Generate_New_Id
+                                        solve( New_Id( ~id_response ) ▶₈ #i )
+                                          case Generate_New_Id
+                                          SOLVED // trace found
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_honest_i_corrupt_s_c:
+  exists-trace
+  "∃ C S I #i #j #k.
+    ((IDPFinish( C, S, I ) @ #i) ∧ (Compromise_Agent( S ) @ #j)) ∧
+    (Compromise_Agent( C ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ C S I #i #j #k.
+  (IDPFinish( C, S, I ) @ #i) ∧
+  (Compromise_Agent( S ) @ #j) ∧
+  (Compromise_Agent( C ) @ #k)"
+*/
+simplify
+solve( !Ltk( $SP, ~ltkSP ) ▶₁ #i )
+  case Initialize_Agent
+  solve( !Ltk( $IdP, ~ltkIdP ) ▶₂ #i )
+    case Initialize_Agent
+    solve( Agent_Initialized( $SP ) ▶₀ #j )
+      case Initialize_Agent
+      solve( !Ltk( $SP, ~ltk ) ▶₁ #j )
+        case Initialize_Agent
+        solve( Agent_Initialized( $C ) ▶₀ #k )
+          case Initialize_Agent
+          solve( !Ltk( $C, ~ltk.1 ) ▶₁ #k )
+            case Initialize_Agent
+            solve( IdP_State_2( $IdP, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>,
+                                <'Artifact', $IdP, ~messageHandle>, ~clientID
+                   ) ▶₀ #i )
+              case IdP_Client_Authentication_case_2
+              solve( !KU( https_request($IdP, ~client_ID_TLS_SP_IdP,
+                                        <
+                                         <'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                                          ~messageHandle>, 
+                                         sign(<'ArtifactResolve', ~id_artifactresolve, $SP, 'Artifact', $IdP, 
+                                               ~messageHandle>,
+                                              ~ltk)
+                                        >)
+                     ) @ #vk.2 )
+                case Adversary_Sends_as_Client
+                solve( !KU( https_request($IdP, ~tls_session_id_C_IdP,
+                                          <$IdP, ~rs, <'AuthnRequest', ~id_authnrequest, $SP, $IdP>, 
+                                           'Signature'>)
+                       ) @ #vk.3 )
+                  case Client_AuthnRequest_Redirect
+                  solve( Agent_Initialized( $SP ) ▶₀ #k.1 )
+                    case Initialize_Agent
+                    solve( Agent_Initialized( $SP ) ▶₀ #j.1 )
+                      case Initialize_Agent
+                      solve( !KU( sign(<'ArtifactResolve', ~id_artifactresolve, $SP, 
+                                        'Artifact', $IdP, ~messageHandle>,
+                                       ~ltk)
+                             ) @ #vk.21 )
+                        case c_sign
+                        solve( !Client_Registered_at_IdP( $IdP, ~clientID, ~clientSecret
+                               ) ▶₃ #i )
+                          case Register_Client_at_IdP
+                          solve( !KU( ~messageHandle ) @ #vk.23 )
+                            case Adversary_Receives_as_Server_case_5
+                            solve( !KU( ~rs ) @ #vk.26 )
+                              case Adversary_Receives_as_Client_case_01
+                              solve( New_Server_TLS_Session( $IdP, ~client_ID_TLS_SP_IdP ) ▶₄ #i )
+                                case Client_Starts_TLS
+                                solve( !KU( ~id_artifactresolve ) @ #vk.19 )
+                                  case Adversary_Receives_as_Client_case_01
+                                  solve( !KU( ~id_authnrequest ) @ #vk.29 )
+                                    case Adversary_Receives_as_Client_case_01
+                                    solve( !KU( ~ltk ) @ #vk.30 )
+                                      case Compromise_Agent
+                                      solve( Agent_Initialized( $SP ) ▶₀ #j.1 )
+                                        case Initialize_Agent
+                                        solve( New_Id( ~id_assertion ) ▶₇ #i )
+                                          case Generate_New_Id
+                                          solve( New_Id( ~id_response ) ▶₈ #i )
+                                            case Generate_New_Id
+                                            SOLVED // trace found
+                                          qed
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma sec_Client_Resource_Authenticity:
+  all-traces
+  "∀ C S I cid csid url res ts #i.
+    (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i) ⇒
+    (((∃ #j. Register_Resource_at_SP( C, S, cid, res, url ) @ #j) ∨
+      (∃ #j. Compromise_Agent( S ) @ #j)) ∨
+     (∃ I.1 #j #k.
+       (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I cid csid url res ts #i.
+  (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i)
+ ∧
+  (∀ #j. (Register_Resource_at_SP( C, S, cid, res, url ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥) ∧
+  (∀ I.1 #j #k.
+    (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_Client_Resource_Authenticity_Strong:
+  all-traces
+  "∀ C S I cid csid url res ts #i.
+    (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i) ⇒
+    (((∃ #j. Register_Resource_at_SP( C, S, cid, res, url ) @ #j) ∨
+      (∃ #j. Compromise_Agent( S ) @ #j)) ∨
+     (∃ #j. Compromise_Agent( I ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I cid csid url res ts #i.
+  (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i)
+ ∧
+  (∀ #j. (Register_Resource_at_SP( C, S, cid, res, url ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( I ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_Client_Registered_Resource_Secrecy:
+  all-traces
+  "∀ C S url res id #i.
+    (Register_Resource_at_SP( C, S, id, res, url ) @ #i) ⇒
+    (((¬(∃ #j. K( res ) @ #j)) ∨ (∃ #j. Compromise_Agent( S ) @ #j)) ∨
+     (∃ I #j #k.
+       (Compromise_Agent( I ) @ #j) ∧ (Register_SP_at_IdP( S, I ) @ #k)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S url res id #i.
+  (Register_Resource_at_SP( C, S, id, res, url ) @ #i)
+ ∧
+  (∃ #j. (K( res ) @ #j)) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥) ∧
+  (∀ I #j #k.
+    (Compromise_Agent( I ) @ #j) ∧ (Register_SP_at_IdP( S, I ) @ #k) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_Client_Registered_Resource_Secrecy_Strong:
+  all-traces
+  "∀ C S url res id #i.
+    (Register_Resource_at_SP( C, S, id, res, url ) @ #i) ⇒
+    ((¬(∃ #j. K( res ) @ #j)) ∨ (∃ #j. Compromise_Agent( S ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S url res id #i.
+  (Register_Resource_at_SP( C, S, id, res, url ) @ #i)
+ ∧
+  (∃ #j. (K( res ) @ #j)) ∧ (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_Client_Resource_Secrecy:
+  all-traces
+  "∀ C S I cid csid url res ts #i.
+    (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i) ⇒
+    (((¬(∃ #j. K( ts ) @ #j)) ∨ (∃ #j. Compromise_Agent( S ) @ #j)) ∨
+     (∃ I.1 #j #k.
+       (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I cid csid url res ts #i.
+  (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i)
+ ∧
+  (∃ #j. (K( ts ) @ #j)) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥) ∧
+  (∀ I.1 #j #k.
+    (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_Client_Resource_Secrecy_Strong:
+  all-traces
+  "∀ C S I cid csid url res ts #i.
+    (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i) ⇒
+    (((¬(∃ #j. K( ts ) @ #j)) ∨ (∃ #j. Compromise_Agent( S ) @ #j)) ∨
+     (∃ #j. Compromise_Agent( I ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I cid csid url res ts #i.
+  (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i)
+ ∧
+  (∃ #j. (K( ts ) @ #j)) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( I ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_Client_Resource_Freshness:
+  all-traces
+  "∀ C S I A cid csid url res ts #i #j.
+    ((Client_Artifact_Redirect( C, S, I, csid, A ) @ #i) ∧
+     (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #j)) ⇒
+    ((∃ I1 cid1 ida #k.
+       ((SP_Params_Client( S, I1, cid1, <res, url, ts>, ida ) @ #k) ∧
+        (#i < #k)) ∧
+       (#k < #j)) ∨
+     (∃ #k. Compromise_Agent( S ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I A cid csid url res ts #i #j.
+  (Client_Artifact_Redirect( C, S, I, csid, A ) @ #i) ∧
+  (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #j)
+ ∧
+  (∀ I1 cid1 ida #k.
+    (SP_Params_Client( S, I1, cid1, <res, url, ts>, ida ) @ #k)
+   ⇒
+    ((¬(#i < #k)) ∨ (¬(#k < #j)))) ∧
+  (∀ #k. (Compromise_Agent( S ) @ #k) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_Client_SP_Non_Injective_Agreement:
+  all-traces
+  "∀ C S I cid csid url res ts #i.
+    (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i) ⇒
+    (((∃ #k ida. SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #k) ∨
+      (∃ #j. Compromise_Agent( S ) @ #j)) ∨
+     (∃ I.1 #j #k.
+       (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I cid csid url res ts #i.
+  (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i)
+ ∧
+  (∀ #k ida.
+    (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #k) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥) ∧
+  (∀ I.1 #j #k.
+    (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_Client_SP_Non_Injective_Agreement_Strong:
+  all-traces
+  "∀ C S I cid csid url res ts #i.
+    (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i) ⇒
+    (((∃ #k ida. SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #k) ∨
+      (∃ #j. Compromise_Agent( S ) @ #j)) ∨
+     (∃ #j. Compromise_Agent( I ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I cid csid url res ts #i.
+  (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i)
+ ∧
+  (∀ #k ida.
+    (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #k) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( I ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_Client_SP_Injective_Agreement:
+  all-traces
+  "∀ C S I cid csid url res ts #i.
+    (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i) ⇒
+    (((∃ #k ida.
+        (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #k) ∧
+        (¬(∃ csid1 I1 #i1.
+            (Client_Params( C, S, I1, cid, csid1, <res, url, ts> ) @ #i1) ∧
+            (¬(#i = #i1))))) ∨
+      (∃ #j. Compromise_Agent( S ) @ #j)) ∨
+     (∃ I.1 #j #k.
+       (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I cid csid url res ts #i.
+  (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i)
+ ∧
+  (∀ #k ida.
+    (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #k)
+   ⇒
+    ∃ csid1 I1 #i1.
+     (Client_Params( C, S, I1, cid, csid1, <res, url, ts> ) @ #i1)
+    ∧
+     ¬(#i = #i1)) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥) ∧
+  (∀ I.1 #j #k.
+    (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_Client_SP_Injective_Agreement_Strong:
+  all-traces
+  "∀ C S I cid csid url res ts #i.
+    (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i) ⇒
+    (((∃ #k ida.
+        (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #k) ∧
+        (¬(∃ csid1 I1 #i1.
+            (Client_Params( C, S, I1, cid, csid1, <res, url, ts> ) @ #i1) ∧
+            (¬(#i = #i1))))) ∨
+      (∃ #j. Compromise_Agent( S ) @ #j)) ∨
+     (∃ #j. Compromise_Agent( I ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I cid csid url res ts #i.
+  (Client_Params( C, S, I, cid, csid, <res, url, ts> ) @ #i)
+ ∧
+  (∀ #k ida.
+    (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #k)
+   ⇒
+    ∃ csid1 I1 #i1.
+     (Client_Params( C, S, I1, cid, csid1, <res, url, ts> ) @ #i1)
+    ∧
+     ¬(#i = #i1)) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( I ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_SP_Client_Resource_Secrecy:
+  all-traces
+  "∀ S I url res cid ts ida #i.
+    (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #i) ⇒
+    (((¬(∃ #k. K( ts ) @ #k)) ∨
+      (∃ C #k #l. (Compromise_Agent( C ) @ #k) ∧ (Agent_ID( C, cid ) @ #l))) ∨
+     (∃ I.1 #k #l.
+       (Compromise_Agent( I.1 ) @ #k) ∧ (Register_SP_at_IdP( S, I.1 ) @ #l)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I url res cid ts ida #i.
+  (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #i)
+ ∧
+  (∃ #k. (K( ts ) @ #k)) ∧
+  (∀ C #k #l.
+    (Compromise_Agent( C ) @ #k) ∧ (Agent_ID( C, cid ) @ #l) ⇒ ⊥) ∧
+  (∀ I.1 #k #l.
+    (Compromise_Agent( I.1 ) @ #k) ∧ (Register_SP_at_IdP( S, I.1 ) @ #l)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_SP_Client_Resource_Secrecy_Strong:
+  all-traces
+  "∀ S I url res cid ts ida #i.
+    (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #i) ⇒
+    (((¬(∃ #k. K( ts ) @ #k)) ∨
+      (∃ C #k #l. (Compromise_Agent( C ) @ #k) ∧ (Agent_ID( C, cid ) @ #l))) ∨
+     (∃ #k. Compromise_Agent( I ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I url res cid ts ida #i.
+  (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #i)
+ ∧
+  (∃ #k. (K( ts ) @ #k)) ∧
+  (∀ C #k #l.
+    (Compromise_Agent( C ) @ #k) ∧ (Agent_ID( C, cid ) @ #l) ⇒ ⊥) ∧
+  (∀ #k. (Compromise_Agent( I ) @ #k) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_SP_Client_Non_Injective_Agreement:
+  all-traces
+  "∀ C S I url res cid ts ida #i #j.
+    ((SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #i) ∧
+     (Agent_ID( C, cid ) @ #j)) ⇒
+    (((∃ csid #k #l.
+        (Client_Resource_Request( C, S, csid, url ) @ #k) ∧
+        (Client_Artifact_Redirect( C, S, I, csid, I ) @ #l)) ∨
+      (∃ #k. Compromise_Agent( C ) @ #k)) ∨
+     (∃ I.1 #k #l.
+       (Compromise_Agent( I.1 ) @ #k) ∧ (Register_SP_at_IdP( S, I.1 ) @ #l)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I url res cid ts ida #i #j.
+  (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #i) ∧
+  (Agent_ID( C, cid ) @ #j)
+ ∧
+  (∀ csid #k #l.
+    (Client_Resource_Request( C, S, csid, url ) @ #k) ∧
+    (Client_Artifact_Redirect( C, S, I, csid, I ) @ #l)
+   ⇒
+    ⊥) ∧
+  (∀ #k. (Compromise_Agent( C ) @ #k) ⇒ ⊥) ∧
+  (∀ I.1 #k #l.
+    (Compromise_Agent( I.1 ) @ #k) ∧ (Register_SP_at_IdP( S, I.1 ) @ #l)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_SP_Client_Non_Injective_Agreement_Strong:
+  all-traces
+  "∀ C S I url res cid ts ida #i #j.
+    ((SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #i) ∧
+     (Agent_ID( C, cid ) @ #j)) ⇒
+    (((∃ csid #k #l.
+        (Client_Resource_Request( C, S, csid, url ) @ #k) ∧
+        (Client_Artifact_Redirect( C, S, I, csid, I ) @ #l)) ∨
+      (∃ #k. Compromise_Agent( C ) @ #k)) ∨
+     (∃ #k. Compromise_Agent( I ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C S I url res cid ts ida #i #j.
+  (SP_Params_Client( S, I, cid, <res, url, ts>, ida ) @ #i) ∧
+  (Agent_ID( C, cid ) @ #j)
+ ∧
+  (∀ csid #k #l.
+    (Client_Resource_Request( C, S, csid, url ) @ #k) ∧
+    (Client_Artifact_Redirect( C, S, I, csid, I ) @ #l)
+   ⇒
+    ⊥) ∧
+  (∀ #k. (Compromise_Agent( C ) @ #k) ⇒ ⊥) ∧
+  (∀ #k. (Compromise_Agent( I ) @ #k) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_SP_IdP_Weak_Agreement:
+  all-traces
+  "∀ S I cid ida mh idr #i.
+    (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i) ⇒
+    ((∃ S1 ida1 mh1 idr1 #j.
+       IdP_Params( I, S1, cid, ida1, mh1, idr1 ) @ #j) ∨
+     (∃ I.1 #j #k.
+       (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I cid ida mh idr #i.
+  (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i)
+ ∧
+  (∀ S1 ida1 mh1 idr1 #j.
+    (IdP_Params( I, S1, cid, ida1, mh1, idr1 ) @ #j) ⇒ ⊥) ∧
+  (∀ I.1 #j #k.
+    (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_SP_IdP_Weak_Agreement_Strong:
+  all-traces
+  "∀ S I cid ida mh idr #i.
+    (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i) ⇒
+    ((∃ S1 ida1 mh1 idr1 #j.
+       IdP_Params( I, S1, cid, ida1, mh1, idr1 ) @ #j) ∨
+     (∃ #j. Compromise_Agent( I ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I cid ida mh idr #i.
+  (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i)
+ ∧
+  (∀ S1 ida1 mh1 idr1 #j.
+    (IdP_Params( I, S1, cid, ida1, mh1, idr1 ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( I ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_SP_IdP_Non_Injective_Agreement:
+  all-traces
+  "∀ S I cid ida mh idr #i.
+    (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i) ⇒
+    ((∃ #j. IdP_Params( I, S, cid, ida, mh, idr ) @ #j) ∨
+     (∃ I.1 #j #k.
+       (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I cid ida mh idr #i.
+  (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i)
+ ∧
+  (∀ #j. (IdP_Params( I, S, cid, ida, mh, idr ) @ #j) ⇒ ⊥) ∧
+  (∀ I.1 #j #k.
+    (Compromise_Agent( I.1 ) @ #j) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_SP_IdP_Non_Injective_Agreement_Strong:
+  all-traces
+  "∀ S I cid ida mh idr #i.
+    (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i) ⇒
+    ((∃ #j. IdP_Params( I, S, cid, ida, mh, idr ) @ #j) ∨
+     (∃ #j. Compromise_Agent( I ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I cid ida mh idr #i.
+  (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i)
+ ∧
+  (∀ #j. (IdP_Params( I, S, cid, ida, mh, idr ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( I ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_SP_IdP_Authentication_Freshness:
+  all-traces
+  "∀ S I cid ida mh idr url #i #j.
+    ((SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i) ∧
+     (SP_Resource_Request( S, I, ida, url ) @ #j)) ⇒
+    ((∃ #k.
+       (IdP_Client_Authentication( I, cid, <'AuthnRequest', ida, S, I> ) @ #k) ∧
+       (#j < #k)) ∨
+     (∃ I.1 #j.1 #k.
+       (Compromise_Agent( I.1 ) @ #j.1) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I cid ida mh idr url #i #j.
+  (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i) ∧
+  (SP_Resource_Request( S, I, ida, url ) @ #j)
+ ∧
+  (∀ #k.
+    (IdP_Client_Authentication( I, cid, <'AuthnRequest', ida, S, I> ) @ #k)
+   ⇒
+    ¬(#j < #k)) ∧
+  (∀ I.1 #j.1 #k.
+    (Compromise_Agent( I.1 ) @ #j.1) ∧ (Register_SP_at_IdP( S, I.1 ) @ #k)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_SP_IdP_Authentication_Freshness_Strong:
+  all-traces
+  "∀ S I cid ida mh idr url #i #j.
+    ((SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i) ∧
+     (SP_Resource_Request( S, I, ida, url ) @ #j)) ⇒
+    ((∃ #k.
+       (IdP_Client_Authentication( I, cid, <'AuthnRequest', ida, S, I> ) @ #k) ∧
+       (#j < #k)) ∨
+     (∃ #j.1. Compromise_Agent( I ) @ #j.1))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I cid ida mh idr url #i #j.
+  (SP_Params_IdP( S, I, cid, ida, mh, idr ) @ #i) ∧
+  (SP_Resource_Request( S, I, ida, url ) @ #j)
+ ∧
+  (∀ #k.
+    (IdP_Client_Authentication( I, cid, <'AuthnRequest', ida, S, I> ) @ #k)
+   ⇒
+    ¬(#j < #k)) ∧
+  (∀ #j.1. (Compromise_Agent( I ) @ #j.1) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_SP_IdP_Assertion_Secrecy:
+  all-traces
+  "∀ S I sec #i.
+    (SP_Assertion_Secret( S, I, sec ) @ #i) ⇒
+    ((¬(∃ #k. K( sec ) @ #k)) ∨
+     (∃ I.1 #k #l.
+       (Compromise_Agent( I.1 ) @ #k) ∧ (Register_SP_at_IdP( S, I.1 ) @ #l)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I sec #i.
+  (SP_Assertion_Secret( S, I, sec ) @ #i)
+ ∧
+  (∃ #k. (K( sec ) @ #k)) ∧
+  (∀ I.1 #k #l.
+    (Compromise_Agent( I.1 ) @ #k) ∧ (Register_SP_at_IdP( S, I.1 ) @ #l)
+   ⇒
+    ⊥)"
+*/
+by sorry
+
+lemma sec_SP_IdP_Assertion_Secrecy_Strong:
+  all-traces
+  "∀ S I sec #i.
+    (SP_Assertion_Secret( S, I, sec ) @ #i) ⇒
+    ((¬(∃ #k. K( sec ) @ #k)) ∨ (∃ #k. Compromise_Agent( I ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I sec #i.
+  (SP_Assertion_Secret( S, I, sec ) @ #i)
+ ∧
+  (∃ #k. (K( sec ) @ #k)) ∧ (∀ #k. (Compromise_Agent( I ) @ #k) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_IdP_SP_Non_Injective_Pre_Agreement:
+  all-traces
+  "∀ I S cid ida mh idr #i.
+    (IdP_Params( I, S, cid, ida, mh, idr ) @ #i) ⇒
+    ((∃ url #j. SP_Resource_Request( S, I, ida, url ) @ #j) ∨
+     (∃ #j. Compromise_Agent( S ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ I S cid ida mh idr #i.
+  (IdP_Params( I, S, cid, ida, mh, idr ) @ #i)
+ ∧
+  (∀ url #j. (SP_Resource_Request( S, I, ida, url ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_IdP_SP_Weak_Agreement:
+  all-traces
+  "∀ I S cid ida mh idr #i.
+    (IdP_Params( I, S, cid, ida, mh, idr ) @ #i) ⇒
+    ((∃ ida1 #j. SP_Resource_Request_With_Artifact( S, I, ida1, mh ) @ #j) ∨
+     (∃ #j. Compromise_Agent( S ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ I S cid ida mh idr #i.
+  (IdP_Params( I, S, cid, ida, mh, idr ) @ #i)
+ ∧
+  (∀ ida1 #j.
+    (SP_Resource_Request_With_Artifact( S, I, ida1, mh ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_IdP_SP_Non_Injective_Agreement:
+  all-traces
+  "∀ I S cid ida mh idr #i.
+    (IdP_Params( I, S, cid, ida, mh, idr ) @ #i) ⇒
+    ((∃ #j. SP_Resource_Request_With_Artifact( S, I, ida, mh ) @ #j) ∨
+     (∃ #j. Compromise_Agent( S ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ I S cid ida mh idr #i.
+  (IdP_Params( I, S, cid, ida, mh, idr ) @ #i)
+ ∧
+  (∀ #j. (SP_Resource_Request_With_Artifact( S, I, ida, mh ) @ #j) ⇒ ⊥) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_IdP_SP_Injective_Agreement:
+  all-traces
+  "∀ I S cid ida mh idr #i.
+    (IdP_Params( I, S, cid, ida, mh, idr ) @ #i) ⇒
+    ((∃ #j.
+       (SP_Resource_Request_With_Artifact( S, I, ida, mh ) @ #j) ∧
+       (¬(∃ I.1 S1 cid1 ida1 idr1 #i1.
+           (IdP_Params( I.1, S1, cid1, ida1, mh, idr1 ) @ #i1) ∧ (¬(#i = #i1))))) ∨
+     (∃ #j. Compromise_Agent( S ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ I S cid ida mh idr #i.
+  (IdP_Params( I, S, cid, ida, mh, idr ) @ #i)
+ ∧
+  (∀ #j.
+    (SP_Resource_Request_With_Artifact( S, I, ida, mh ) @ #j)
+   ⇒
+    ∃ I.1 S1 cid1 ida1 idr1 #i1.
+     (IdP_Params( I.1, S1, cid1, ida1, mh, idr1 ) @ #i1) ∧ ¬(#i = #i1)) ∧
+  (∀ #j. (Compromise_Agent( S ) @ #j) ⇒ ⊥)"
+*/
+by sorry
+
+lemma sec_IdP_SP_Assertion_Secrecy:
+  all-traces
+  "∀ S I sec #i.
+    (IdP_Assertion_Secret( I, S, sec ) @ #i) ⇒
+    ((¬(∃ #k. K( sec ) @ #k)) ∨ (∃ #k. Compromise_Agent( S ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ S I sec #i.
+  (IdP_Assertion_Secret( I, S, sec ) @ #i)
+ ∧
+  (∃ #k. (K( sec ) @ #k)) ∧ (∀ #k. (Compromise_Agent( S ) @ #k) ⇒ ⊥)"
+*/
+by sorry
+
+/* All well-formedness checks were successful. */
+
+end
