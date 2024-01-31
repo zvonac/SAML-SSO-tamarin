@@ -29,7 +29,7 @@ Every symbolic model represents one variant of **SP-initiated SSO with POST/Arti
 `SP_initiated_POST-Artifact\tools` - contains scripts used for building Docker image, and executing tamarin docker image in interactive or batch mode. 
 
 
-## Detailed Set-up and Run Instructions
+## Detailed Set-up Instructions
 Position to SP-initiated SSO with POST/Artifact Bindings use-case directory.
 ```
 cd SP_initiated_POST-Artifact/
@@ -46,6 +46,7 @@ To generate new models if you modify *meta model* use:
 Before starting tamarin using scripts or tools, depending on your system memory you should adjust HASKELL_MEMORY and DOCKER_MEMORY parameters in tools files.
 Wiht more memory and CPU, verification will pass quicker, using 16 CPUs and 20 GB RAM for Docker, we managed to verify all propreties for all variants in 10 hours.
 
+## Detailed Run Instructions
 To explore models and execute verification manualy through graphical interface use (once the server starts connect with browser to `http://localhost:3001`):
 ```
 ./tools/tamarin_interactive.sh
@@ -61,10 +62,6 @@ To generate and prove all properties automaticaly run:
 ```
 ./scripts/gen_and_prove_all.sh
 ```
-To parse results into overview table run:
-```
-./scripts/parse_results.py
-```
 
 ## Output Description
 Formal verification through `scripts/prove_*` generates two result files in directory `analyzed`:
@@ -72,6 +69,10 @@ Formal verification through `scripts/prove_*` generates two result files in dire
 - `*_summary.txt`
 First one is Tamarin file that contains all verification steps, and other is text summary files which shows which properties have been verified or falsifed.
 Using `scprits/parse_results.py` all `*_summary.txt` files are parsed and script generetes single `summary.txt` file that contains an overview table showing which scurity properties were verified (marked with 'o') and which are falsifed (marked with 'x') for every use-case variant. Executable and helper lemmas are just briefly mentioned in `summary.txt`.
+To parse results into overview table run:
+```
+./scripts/parse_results.py
+```
 
 ## Contact Information
 Corresponding author: Zvonimir Hartl (zvonimir.hartl@fer.hr).
