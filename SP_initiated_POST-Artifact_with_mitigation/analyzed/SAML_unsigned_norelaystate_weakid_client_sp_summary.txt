@@ -1,0 +1,46 @@
+==============================================================================
+summary of summaries:
+
+analyzed: SAML_unsigned_norelaystate_weakid.spthy
+
+  output:          analyzed/SAML_unsigned_norelaystate_weakid_client_sp_analyzed.spthy
+  processing time: 3552.46014316s
+  https_typing (all-traces): analysis incomplete (1 steps)
+  helper_Either_Honest_or_Compromised_Client (all-traces): analysis incomplete (1 steps)
+  helper_Either_Honest_or_Compromised_SP (all-traces): analysis incomplete (1 steps)
+  helper_Either_Honest_or_Compromised_IdP (all-traces): analysis incomplete (1 steps)
+  helper_tls_Sends_as_Server_Only_if_Compromised (all-traces): analysis incomplete (1 steps)
+  helper_tls_Cannot_Send_As_Honest_Server_2 (all-traces): analysis incomplete (1 steps)
+  helper_tls_Session_Id_Secrecy (all-traces): analysis incomplete (1 steps)
+  helper_Long_Term_Key_Secrecy (all-traces): analysis incomplete (1 steps)
+  helper_Client_Secret_Secrecy (all-traces): analysis incomplete (1 steps)
+  sec_Client_Resource_Authenticity (all-traces): verified (422 steps)
+  sec_Client_Resource_Authenticity_Strong (all-traces): verified (299 steps)
+  sec_Client_Registered_Resource_Secrecy (all-traces): verified (837 steps)
+  sec_Client_Registered_Resource_Secrecy_Strong (all-traces): falsified - found trace (32 steps)
+  sec_Client_Resource_Secrecy (all-traces): verified (1041 steps)
+  sec_Client_Resource_Secrecy_Strong (all-traces): verified (864 steps)
+  sec_Client_Resource_Freshness (all-traces): verified (92 steps)
+  sec_Client_SP_Non_Injective_Agreement (all-traces): verified (422 steps)
+  sec_Client_SP_Non_Injective_Agreement_Strong (all-traces): verified (299 steps)
+  sec_Client_SP_Injective_Agreement (all-traces): verified (506 steps)
+  sec_Client_SP_Injective_Agreement_Strong (all-traces): verified (383 steps)
+  sec_SP_Client_Resource_Secrecy (all-traces): verified (4375 steps)
+  sec_SP_Client_Resource_Secrecy_Strong (all-traces): verified (7903 steps)
+  sec_SP_Client_Non_Injective_Agreement (all-traces): verified (1716 steps)
+  sec_SP_Client_Non_Injective_Agreement_Strong (all-traces): verified (5244 steps)
+  sec_SP_IdP_Weak_Agreement (all-traces): analysis incomplete (1 steps)
+  sec_SP_IdP_Weak_Agreement_Strong (all-traces): analysis incomplete (1 steps)
+  sec_SP_IdP_Non_Injective_Agreement (all-traces): analysis incomplete (1 steps)
+  sec_SP_IdP_Non_Injective_Agreement_Strong (all-traces): analysis incomplete (1 steps)
+  sec_SP_IdP_Authentication_Freshness (all-traces): analysis incomplete (1 steps)
+  sec_SP_IdP_Authentication_Freshness_Strong (all-traces): analysis incomplete (1 steps)
+  sec_SP_IdP_Assertion_Secrecy (all-traces): analysis incomplete (1 steps)
+  sec_SP_IdP_Assertion_Secrecy_Strong (all-traces): analysis incomplete (1 steps)
+  sec_IdP_SP_Non_Injective_Pre_Agreement (all-traces): analysis incomplete (1 steps)
+  sec_IdP_SP_Weak_Agreement (all-traces): analysis incomplete (1 steps)
+  sec_IdP_SP_Non_Injective_Agreement (all-traces): analysis incomplete (1 steps)
+  sec_IdP_SP_Injective_Agreement (all-traces): analysis incomplete (1 steps)
+  sec_IdP_SP_Assertion_Secrecy (all-traces): analysis incomplete (1 steps)
+
+==============================================================================
