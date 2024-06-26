@@ -4,11 +4,10 @@
 This archive contains symbolic models of **SAML V2.0 Web Browser SSO Profile** and comprehensive set of security properties agianst which models can be verified using Tamarin prover.
 The [Tamarin prover](https://tamarin-prover.github.io/) is tool for symbolic modeling and automated analysis of security protocols.
 
-Currently this archive contains Tamarin sympbolic models for 8 variants of ***SP-initiated SSO with POST/Artifact Bindings*** use case.
-
+Currently this archive contains Tamarin sympbolic models for 8 variants of ***SP-initiated SSO with POST/Artifact Bindings*** use case and models for 8 variants of same use case with mitigation for the artifact-session confusion attack.
 
 ## Size
-Total size of archive is 2,1MB compressed and 90MB decompressed.
+Total size of archive is 4,1MB compressed and 179,7MB decompressed.
 
 ## Platform and Environment
 Suplementary code and scripts used for initiating automatic verification using Tamarin Prover and other accompanying actions are intended for use on the Linux operating system.
