@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Zvonimir"
+  given-names: "Hartl"
+  orcid: "https://orcid.org/0000-0003-3500-4418"
+- family-names: "Ante"
+  given-names: "Đerek"
+  orcid: "https://orcid.org/0000-0002-2437-8134"
+title: "SAML V2.0 Web Browser SSO Tamarin models"
+version: 1.0.0
+url: "https://github.com/zvonac/SAML-SSO-tamarin"
